@@ -206,6 +206,16 @@ class ProductionHttpTests(SimpleTestCase):
             self.assertIn('authorization', response['Access-Control-Allow-Headers'])
             self.assertNotIn('Access-Control-Allow-Credentials', response)
 
+    @override_settings(CORS_ALLOWED_ORIGINS=['http://127.0.0.1:5173'])
+    def test_health_allows_only_explicit_desktop_origin(self):
+        allowed = self.client.get('/health/', HTTP_ORIGIN='http://127.0.0.1:5173')
+        blocked = self.client.get('/health/', HTTP_ORIGIN='https://untrusted.example.test')
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed['Access-Control-Allow-Origin'], 'http://127.0.0.1:5173')
+        self.assertNotIn('Access-Control-Allow-Credentials', allowed)
+        self.assertNotIn('Access-Control-Allow-Origin', blocked)
+
     @override_settings(CORS_ALLOWED_ORIGINS=['null'])
     def test_other_origin_and_admin_do_not_get_cors(self):
         response = self.client.options('/api/token/', HTTP_ORIGIN='https://untrusted.example.test',

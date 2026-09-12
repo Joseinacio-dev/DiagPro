@@ -316,7 +316,7 @@ _development_cors_origins = 'http://localhost:5173,http://127.0.0.1:5173,null,fi
 CORS_ALLOWED_ORIGINS = env_list('DJANGO_CORS_ALLOWED_ORIGINS', _development_cors_origins)
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = False
-CORS_URLS_REGEX = r'^/api/.*$'
+CORS_URLS_REGEX = r'^/(?:api/.*|health/?)$'
 
 DIAGPRO_HEALTHCHECK_DATABASE = env_bool('DJANGO_HEALTHCHECK_DATABASE', True)
 _log_level = os.environ.get('DJANGO_LOG_LEVEL', 'INFO').upper()

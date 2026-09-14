@@ -235,6 +235,7 @@ DIAGPRO_THROTTLE_RATES = {
     'google_oauth_start': env_rate('DJANGO_THROTTLE_GOOGLE_OAUTH_START_RATE', '20/min'),
     'google_oauth_callback': env_rate('DJANGO_THROTTLE_GOOGLE_OAUTH_CALLBACK_RATE', '60/min'),
     'google_oauth_complete': env_rate('DJANGO_THROTTLE_GOOGLE_OAUTH_COMPLETE_RATE', '120/min'),
+    'diag_ia': env_rate('DJANGO_THROTTLE_DIAG_IA_RATE', '20/min'),
 }
 DIAGPRO_THROTTLE_CACHE_ALIAS = 'throttle'
 DIAGPRO_NUM_PROXIES = env_nonnegative_int('DJANGO_NUM_PROXIES')
@@ -346,3 +347,17 @@ MERCADO_PAGO_WEBHOOK_URL = os.environ.get('MERCADO_PAGO_WEBHOOK_URL', '')
 MERCADO_PAGO_USE_SANDBOX = os.environ.get('MERCADO_PAGO_USE_SANDBOX', 'true').lower() in {'1', 'true', 'yes'}
 MERCADO_PAGO_TIMEOUT_SECONDS = int(os.environ.get('MERCADO_PAGO_TIMEOUT_SECONDS', '10'))
 MERCADO_PAGO_LICENSE_DURATION_DAYS = int(os.environ.get('MERCADO_PAGO_LICENSE_DURATION_DAYS', '30'))
+
+# Gemini: somente o backend acessa estas variáveis. Sem ambas, o endpoint retorna
+# indisponibilidade segura e o desktop utiliza sua base local.
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip()
+GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '12'))
+GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get('GEMINI_MAX_OUTPUT_TOKENS', '600'))
+GEMINI_MAX_RESPONSE_CHARS = int(os.environ.get('GEMINI_MAX_RESPONSE_CHARS', '5000'))
+if not 1 <= GEMINI_TIMEOUT_SECONDS <= 30:
+    raise ImproperlyConfigured('GEMINI_TIMEOUT_SECONDS deve estar entre 1 e 30.')
+if not 128 <= GEMINI_MAX_OUTPUT_TOKENS <= 2048:
+    raise ImproperlyConfigured('GEMINI_MAX_OUTPUT_TOKENS deve estar entre 128 e 2048.')
+if not 500 <= GEMINI_MAX_RESPONSE_CHARS <= 10000:
+    raise ImproperlyConfigured('GEMINI_MAX_RESPONSE_CHARS deve estar entre 500 e 10000.')

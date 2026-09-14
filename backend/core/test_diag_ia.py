@@ -1,14 +1,25 @@
 import json
+from io import StringIO
 from unittest.mock import patch
 
 import requests
 from django.contrib.auth import get_user_model
 from django.core.cache import caches
+from django.core.management import call_command
 from django.test import override_settings
 from django.urls import resolve, reverse
 from rest_framework.test import APITestCase
 
-from core.diag_ia.gemini_service import GeminiUnavailable, generate_with_gemini
+from core.diag_ia.gemini_service import (
+    GeminiAuthenticationError,
+    GeminiBadRequest,
+    GeminiModelError,
+    GeminiPermissionError,
+    GeminiQuotaError,
+    GeminiTimeout,
+    GeminiUnavailable,
+    generate_with_gemini,
+)
 from core.diag_ia.sanitizer import sanitize_context
 from core.diag_ia.service import generate_diag_ia_response
 from devicecheck_backend.observability import SafeJsonFormatter
@@ -85,7 +96,7 @@ class DiagIaApiTests(APITestCase):
             self.assertEqual(response.json()['source'], 'policy')
         generate.assert_not_called()
 
-    @patch('core.diag_ia.views.generate_diag_ia_response', side_effect=GeminiUnavailable('timeout'))
+    @patch('core.diag_ia.views.generate_diag_ia_response', side_effect=GeminiTimeout('TIMEOUT', duration_ms=12, timed_out=True))
     def test_timeout_is_safe_503(self, _generate):
         self.authenticated()
         with self.assertLogs('diagpro.operations', level='WARNING') as logs:
@@ -93,10 +104,13 @@ class DiagIaApiTests(APITestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()['code'], 'diag_ia_unavailable')
         formatted = SafeJsonFormatter().format(logs.records[0])
-        self.assertNotIn('timeout', response.content.decode())
-        self.assertNotIn('GEMINI', formatted)
+        event = json.loads(formatted)
+        self.assertEqual(event['provider'], 'Gemini')
+        self.assertEqual(event['provider_error'], 'TIMEOUT')
+        self.assertTrue(event['timeout'])
+        self.assertNotIn('TIMEOUT', response.content.decode())
 
-    @patch('core.diag_ia.views.generate_diag_ia_response', side_effect=GeminiUnavailable('upstream_error'))
+    @patch('core.diag_ia.views.generate_diag_ia_response', side_effect=GeminiUnavailable('UNAVAILABLE', provider_status=503))
     def test_upstream_500_is_safe_503(self, _generate):
         self.authenticated()
         response = self.client.post(self.url, {'message': 'Como uso?'}, format='json')
@@ -115,6 +129,15 @@ class DiagIaApiTests(APITestCase):
 
 @override_settings(GEMINI_API_KEY='test-key', GEMINI_MODEL='test-model', GEMINI_TIMEOUT_SECONDS=7, GEMINI_MAX_OUTPUT_TOKENS=300, GEMINI_MAX_RESPONSE_CHARS=5000)
 class GeminiClientTests(APITestCase):
+    def assert_provider_error(self, post, status, provider_error, expected_class):
+        post.return_value.status_code = status
+        post.return_value.json.return_value = {'error': {'status': provider_error}}
+        with self.assertRaises(expected_class) as raised:
+            generate_with_gemini(system='system', contents=[])
+        self.assertEqual(raised.exception.provider_status, status)
+        self.assertEqual(raised.exception.provider_error, provider_error)
+        self.assertEqual(raised.exception.model, 'test-model')
+
     @patch('core.diag_ia.gemini_service.requests.post')
     def test_normal_response_and_api_key_only_in_header(self, post):
         post.return_value.status_code = 200
@@ -128,6 +151,61 @@ class GeminiClientTests(APITestCase):
 
     @patch('core.diag_ia.gemini_service.requests.post', side_effect=requests.Timeout('secret-url'))
     def test_timeout_is_translated_without_secret_text(self, _post):
-        with self.assertRaises(GeminiUnavailable) as error:
+        with self.assertRaises(GeminiTimeout) as error:
             generate_with_gemini(system='system', contents=[])
-        self.assertEqual(str(error.exception), 'timeout')
+        self.assertEqual(error.exception.provider_error, 'TIMEOUT')
+        self.assertTrue(error.exception.timed_out)
+        self.assertNotIn('secret-url', str(error.exception))
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_400_is_bad_request(self, post):
+        self.assert_provider_error(post, 400, 'INVALID_ARGUMENT', GeminiBadRequest)
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_invalid_key_is_authentication_error_even_when_google_uses_400(self, post):
+        post.return_value.status_code = 400
+        post.return_value.json.return_value = {'error': {'status': 'INVALID_ARGUMENT', 'details': [{'reason': 'API_KEY_INVALID', 'message': 'private'}]}}
+        with self.assertRaises(GeminiAuthenticationError) as raised:
+            generate_with_gemini(system='system', contents=[])
+        self.assertEqual(raised.exception.provider_error, 'API_KEY_INVALID')
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_401_is_authentication_error(self, post):
+        self.assert_provider_error(post, 401, 'UNAUTHENTICATED', GeminiAuthenticationError)
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_403_is_permission_error(self, post):
+        self.assert_provider_error(post, 403, 'PERMISSION_DENIED', GeminiPermissionError)
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_404_is_model_error(self, post):
+        self.assert_provider_error(post, 404, 'NOT_FOUND', GeminiModelError)
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_429_is_quota_error(self, post):
+        self.assert_provider_error(post, 429, 'RESOURCE_EXHAUSTED', GeminiQuotaError)
+
+    @patch('core.diag_ia.gemini_service.requests.post')
+    def test_500_and_503_are_provider_unavailable(self, post):
+        for status in (500, 503):
+            with self.subTest(status=status):
+                self.assert_provider_error(post, status, 'UNAVAILABLE', GeminiUnavailable)
+
+    @override_settings(GEMINI_API_KEY='configured-but-not-printed', GEMINI_MODEL='gemini-3.6-flash')
+    def test_safe_configuration_command_never_prints_key(self):
+        output = StringIO()
+        call_command('check_gemini', stdout=output)
+        rendered = output.getvalue()
+        self.assertIn('GEMINI_API_KEY_PRESENT=true', rendered)
+        self.assertIn('GEMINI_MODEL=gemini-3.6-flash', rendered)
+        self.assertNotIn('configured-but-not-printed', rendered)
+
+    @override_settings(GEMINI_API_KEY='configured-but-not-printed', GEMINI_MODEL='gemini-3.6-flash')
+    @patch('core.management.commands.check_gemini.generate_with_gemini', return_value='OK')
+    def test_safe_live_command_uses_only_synthetic_prompt(self, generate):
+        output = StringIO()
+        call_command('check_gemini', '--live', stdout=output)
+        self.assertIn('GEMINI_REAL_TEST=SUCCESS', output.getvalue())
+        payload = json.dumps(generate.call_args.kwargs)
+        self.assertIn('Responda apenas: OK', payload)
+        self.assertNotIn('configured-but-not-printed', output.getvalue())

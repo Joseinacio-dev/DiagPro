@@ -16,6 +16,8 @@ EVENTS = frozenset({
 })
 logger = logging.getLogger('diagpro.operations')
 SAFE_ERROR_TYPE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,79}$')
+SAFE_PROVIDER_ERROR = re.compile(r'^[A-Z][A-Z0-9_]{0,63}$')
+SAFE_MODEL = re.compile(r'^[a-z0-9][a-z0-9._-]{0,79}$')
 
 
 class SafeJsonFormatter(logging.Formatter):
@@ -35,6 +37,22 @@ class SafeJsonFormatter(logging.Formatter):
         error_type = getattr(record, 'error_type', None)
         if isinstance(error_type, str) and SAFE_ERROR_TYPE.fullmatch(error_type):
             result['error_type'] = error_type
+        if getattr(record, 'provider', None) == 'Gemini':
+            result['provider'] = 'Gemini'
+        provider_status = getattr(record, 'provider_status', None)
+        if type(provider_status) is int and 100 <= provider_status <= 599:
+            result['provider_status'] = provider_status
+        provider_error = getattr(record, 'provider_error', None)
+        if isinstance(provider_error, str) and SAFE_PROVIDER_ERROR.fullmatch(provider_error):
+            result['provider_error'] = provider_error
+        duration = getattr(record, 'request_duration_ms', None)
+        if type(duration) is int and 0 <= duration <= 300_000:
+            result['request_duration_ms'] = duration
+        model = getattr(record, 'provider_model', None)
+        if isinstance(model, str) and SAFE_MODEL.fullmatch(model):
+            result['model'] = model
+        if type(getattr(record, 'provider_timeout', None)) is bool:
+            result['timeout'] = record.provider_timeout
         return json.dumps(result, ensure_ascii=True)
 
 

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 import os
+import re
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 import dj_database_url
@@ -361,3 +362,5 @@ if not 128 <= GEMINI_MAX_OUTPUT_TOKENS <= 2048:
     raise ImproperlyConfigured('GEMINI_MAX_OUTPUT_TOKENS deve estar entre 128 e 2048.')
 if not 500 <= GEMINI_MAX_RESPONSE_CHARS <= 10000:
     raise ImproperlyConfigured('GEMINI_MAX_RESPONSE_CHARS deve estar entre 500 e 10000.')
+if GEMINI_MODEL and not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,79}', GEMINI_MODEL):
+    raise ImproperlyConfigured('GEMINI_MODEL possui formato inválido.')

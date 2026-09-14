@@ -22,7 +22,7 @@ from .google_auth_views import (
     GoogleOAuthCompleteView,
     GoogleOAuthStartView,
 )
-from .diag_ia.views import DiagIaChatView
+from .diag_ia.views import DiagIaChatView, DiagIaProviderHealthView
 
 router = DefaultRouter()
 router.register(r'empresas', EmpresaViewSet, basename='empresa')
@@ -36,6 +36,7 @@ router.register(r'security/findings', SecurityFindingViewSet, basename='security
 
 urlpatterns = [
     path('diag-ia/chat/', DiagIaChatView.as_view(), name='diag-ia-chat'),
+    path('diag-ia/provider-health/', DiagIaProviderHealthView.as_view(), name='diag-ia-provider-health'),
     path('auth/google/start/', GoogleOAuthStartView.as_view(), name='google-oauth-start'),
     path('auth/google/callback/', GoogleOAuthCallbackView.as_view(), name='google-oauth-callback'),
     path('auth/google/complete/', GoogleOAuthCompleteView.as_view(), name='google-oauth-complete'),

@@ -237,6 +237,7 @@ DIAGPRO_THROTTLE_RATES = {
     'google_oauth_callback': env_rate('DJANGO_THROTTLE_GOOGLE_OAUTH_CALLBACK_RATE', '60/min'),
     'google_oauth_complete': env_rate('DJANGO_THROTTLE_GOOGLE_OAUTH_COMPLETE_RATE', '120/min'),
     'diag_ia': env_rate('DJANGO_THROTTLE_DIAG_IA_RATE', '20/min'),
+    'diag_ia_provider_health': env_rate('DJANGO_THROTTLE_DIAG_IA_PROVIDER_HEALTH_RATE', '5/min'),
 }
 DIAGPRO_THROTTLE_CACHE_ALIAS = 'throttle'
 DIAGPRO_NUM_PROXIES = env_nonnegative_int('DJANGO_NUM_PROXIES')

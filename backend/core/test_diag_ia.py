@@ -1,6 +1,6 @@
 import json
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import requests
 from django.contrib.auth import get_user_model
@@ -17,9 +17,11 @@ from core.diag_ia.gemini_service import (
     GeminiModelError,
     GeminiPermissionError,
     GeminiQuotaError,
+    GeminiResult,
     GeminiTimeout,
     GeminiUnavailable,
     generate_with_gemini,
+    generate_with_gemini_result,
 )
 from core.diag_ia.sanitizer import sanitize_context
 from core.diag_ia.service import generate_diag_ia_response
@@ -109,6 +111,7 @@ class DiagIaApiTests(APITestCase):
         self.assertEqual(event['provider'], 'Gemini')
         self.assertEqual(event['provider_error'], 'TIMEOUT')
         self.assertTrue(event['timeout'])
+        self.assertEqual(event['final_provider'], 'local')
         self.assertNotIn('TIMEOUT', response.content.decode())
 
     @patch('core.diag_ia.views.generate_diag_ia_response', side_effect=GeminiUnavailable('UNAVAILABLE', provider_status=503))
@@ -131,6 +134,7 @@ class DiagIaApiTests(APITestCase):
 @override_settings(
     GEMINI_API_KEY='test-provider-key-not-a-secret',
     GEMINI_MODEL='gemini-test-model',
+    GEMINI_FALLBACK_MODEL='gemini-fallback-model',
 )
 class DiagIaProviderHealthTests(APITestCase):
     url = '/api/diag-ia/provider-health/'
@@ -152,75 +156,106 @@ class DiagIaProviderHealthTests(APITestCase):
         self.authenticate(self.staff_user)
         self.assertEqual(self.client.post(self.url, {}, format='json').status_code, 405)
 
-    @patch('core.diag_ia.views.generate_with_gemini')
+    @patch('core.diag_ia.views.generate_with_gemini_result')
     def test_authentication_is_required(self, generate):
         self.assertEqual(self.client.get(self.url).status_code, 401)
         generate.assert_not_called()
 
-    @patch('core.diag_ia.views.generate_with_gemini')
+    @patch('core.diag_ia.views.generate_with_gemini_result')
     def test_common_user_is_forbidden(self, generate):
         self.authenticate(self.common_user)
         self.assertEqual(self.client.get(self.url).status_code, 403)
         generate.assert_not_called()
 
-    @patch('core.diag_ia.views.generate_with_gemini', return_value='OK')
+    @patch('core.diag_ia.views.generate_with_gemini_result')
     def test_staff_can_run_safe_provider_test(self, generate):
+        generate.return_value = GeminiResult(
+            text='OK', model_used='gemini-test-model', primary_status=200,
+            fallback_status=None, attempts=1, duration_ms=8, fallback_model_used=False,
+        )
         self.authenticate(self.staff_user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {
-            'provider': 'gemini', 'configured': True, 'model': 'gemini-test-model',
-            'success': True, 'provider_status': 200, 'provider_code': 'OK',
-            'error_class': None, 'duration_ms': response.json()['duration_ms'],
+            'provider': 'gemini', 'configured': True,
+            'primary_model': 'gemini-test-model', 'fallback_model': 'gemini-fallback-model',
+            'success': True, 'model_used': 'gemini-test-model',
+            'primary_status': 200, 'fallback_status': None, 'provider_code': 'OK',
+            'error_class': None, 'duration_ms': 8, 'attempts': 1,
         })
         call = generate.call_args.kwargs
         self.assertEqual(call['contents'][0]['parts'][0]['text'], 'Responda apenas: OK')
         self.assertNotIn('OK', response.json().keys())
 
-    @patch('core.diag_ia.views.generate_with_gemini', return_value='OK')
-    def test_superuser_without_staff_flag_is_allowed(self, _generate):
+    @patch('core.diag_ia.views.generate_with_gemini_result')
+    def test_superuser_without_staff_flag_is_allowed(self, generate):
+        generate.return_value = GeminiResult(
+            text='OK', model_used='gemini-test-model', primary_status=200,
+            fallback_status=None, attempts=1, duration_ms=5, fallback_model_used=False,
+        )
         self.authenticate(self.superuser)
         self.assertEqual(self.client.get(self.url).status_code, 200)
 
     @patch(
-        'core.diag_ia.views.generate_with_gemini',
-        side_effect=GeminiPermissionError('PERMISSION_DENIED', provider_status=403, duration_ms=17),
+        'core.diag_ia.views.generate_with_gemini_result',
+        side_effect=GeminiPermissionError(
+            'PERMISSION_DENIED', provider_status=403, duration_ms=17,
+            primary_status=403, attempts=1,
+        ),
     )
     def test_provider_403_is_sanitized(self, _generate):
         self.authenticate(self.staff_user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['success'], False)
-        self.assertEqual(response.json()['provider_status'], 403)
+        self.assertEqual(response.json()['primary_status'], 403)
         self.assertEqual(response.json()['provider_code'], 'PERMISSION_DENIED')
         self.assertEqual(response.json()['error_class'], 'GeminiPermissionError')
 
     @patch(
-        'core.diag_ia.views.generate_with_gemini',
-        side_effect=GeminiQuotaError('RESOURCE_EXHAUSTED', provider_status=429, duration_ms=21),
+        'core.diag_ia.views.generate_with_gemini_result',
+        side_effect=GeminiQuotaError(
+            'RESOURCE_EXHAUSTED', provider_status=429, duration_ms=21,
+            primary_status=429, attempts=1,
+        ),
     )
     def test_provider_429_is_sanitized(self, _generate):
         self.authenticate(self.staff_user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['provider_status'], 429)
+        self.assertEqual(response.json()['primary_status'], 429)
         self.assertEqual(response.json()['provider_code'], 'RESOURCE_EXHAUSTED')
         self.assertEqual(response.json()['error_class'], 'GeminiQuotaError')
 
     @patch(
-        'core.diag_ia.views.generate_with_gemini',
-        side_effect=GeminiTimeout('TIMEOUT', duration_ms=25, timed_out=True),
+        'core.diag_ia.views.generate_with_gemini_result',
+        side_effect=GeminiTimeout('TIMEOUT', duration_ms=25, timed_out=True, attempts=4),
     )
     def test_timeout_is_sanitized(self, _generate):
         self.authenticate(self.staff_user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.json()['provider_status'])
+        self.assertIsNone(response.json()['primary_status'])
         self.assertEqual(response.json()['provider_code'], 'TIMEOUT')
         self.assertEqual(response.json()['error_class'], 'GeminiTimeout')
 
+    @patch('core.diag_ia.views.generate_with_gemini_result')
+    def test_provider_health_reports_fallback_model_effectively_used(self, generate):
+        generate.return_value = GeminiResult(
+            text='OK', model_used='gemini-fallback-model', primary_status=503,
+            fallback_status=200, attempts=4, duration_ms=3200, fallback_model_used=True,
+        )
+        self.authenticate(self.staff_user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(response.json()['model_used'], 'gemini-fallback-model')
+        self.assertEqual(response.json()['primary_status'], 503)
+        self.assertEqual(response.json()['fallback_status'], 200)
+        self.assertEqual(response.json()['attempts'], 4)
+
     @patch(
-        'core.diag_ia.views.generate_with_gemini',
+        'core.diag_ia.views.generate_with_gemini_result',
         side_effect=GeminiPermissionError('unsafe provider detail with secret', provider_status=403, duration_ms=3),
     )
     def test_response_and_log_never_expose_secrets(self, _generate):
@@ -233,15 +268,186 @@ class DiagIaProviderHealthTests(APITestCase):
         self.assertNotIn('Authorization', rendered)
         self.assertNotIn('Responda apenas', rendered)
 
-    @patch('core.diag_ia.views.generate_with_gemini', return_value='OK')
-    def test_throttle_allows_only_five_calls_per_minute(self, _generate):
+    @patch('core.diag_ia.views.generate_with_gemini_result')
+    def test_throttle_allows_only_five_calls_per_minute(self, generate):
+        generate.return_value = GeminiResult(
+            text='OK', model_used='gemini-test-model', primary_status=200,
+            fallback_status=None, attempts=1, duration_ms=5, fallback_model_used=False,
+        )
         self.authenticate(self.staff_user)
         for _ in range(5):
             self.assertEqual(self.client.get(self.url).status_code, 200)
         self.assertEqual(self.client.get(self.url).status_code, 429)
 
 
-@override_settings(GEMINI_API_KEY='test-key', GEMINI_MODEL='test-model', GEMINI_TIMEOUT_SECONDS=7, GEMINI_MAX_OUTPUT_TOKENS=300, GEMINI_MAX_RESPONSE_CHARS=5000)
+class GeminiResilienceTests(APITestCase):
+    primary_model = 'gemini-primary-model'
+    fallback_model = 'gemini-fallback-model'
+
+    def unavailable(self, model=None, status=503):
+        return GeminiUnavailable(
+            'UNAVAILABLE', provider_status=status, duration_ms=4,
+            model=model or self.primary_model,
+        )
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service._request_once', return_value=('principal', 6))
+    def test_primary_200_returns_without_retry(self, request_once):
+        result = generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(result.text, 'principal')
+        self.assertEqual(result.model_used, self.primary_model)
+        self.assertEqual(result.attempts, 1)
+        self.assertFalse(result.fallback_model_used)
+        request_once.assert_called_once()
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_primary_503_then_retry_200(self, request_once, sleep):
+        request_once.side_effect = [self.unavailable(), ('retry-ok', 5)]
+        result = generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(result.text, 'retry-ok')
+        self.assertEqual(result.model_used, self.primary_model)
+        self.assertEqual(result.attempts, 2)
+        sleep.assert_called_once_with(1.0)
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_transient_network_error_is_retried(self, request_once, sleep):
+        request_once.side_effect = [
+            GeminiUnavailable('NETWORK_ERROR', duration_ms=3, model=self.primary_model),
+            ('network-recovered', 5),
+        ]
+        result = generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(result.text, 'network-recovered')
+        self.assertEqual(result.attempts, 2)
+        sleep.assert_called_once_with(1.0)
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_three_primary_503_then_fallback_200(self, request_once, sleep):
+        request_once.side_effect = [
+            self.unavailable(), self.unavailable(), self.unavailable(),
+            ('fallback-ok', 7),
+        ]
+        result = generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(result.text, 'fallback-ok')
+        self.assertEqual(result.model_used, self.fallback_model)
+        self.assertEqual(result.primary_status, 503)
+        self.assertEqual(result.fallback_status, 200)
+        self.assertEqual(result.attempts, 4)
+        self.assertTrue(result.fallback_model_used)
+        self.assertEqual(sleep.call_args_list, [call(1.0), call(2.0)])
+        self.assertEqual(
+            [call.kwargs['model'] for call in request_once.call_args_list],
+            [self.primary_model, self.primary_model, self.primary_model, self.fallback_model],
+        )
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_primary_and_fallback_503_use_safe_local_handoff(self, request_once, _sleep):
+        request_once.side_effect = [
+            self.unavailable(), self.unavailable(), self.unavailable(),
+            self.unavailable(model=self.fallback_model),
+        ]
+        with self.assertLogs('diagpro.operations', level='WARNING') as logs:
+            with self.assertRaises(GeminiUnavailable) as raised:
+                generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(raised.exception.primary_status, 503)
+        self.assertEqual(raised.exception.fallback_status, 503)
+        self.assertEqual(raised.exception.attempts, 4)
+        self.assertTrue(raised.exception.fallback_model_used)
+        final_event = json.loads(SafeJsonFormatter().format(logs.records[-1]))
+        self.assertEqual(final_event['final_provider'], 'unavailable')
+        self.assertTrue(final_event['fallback_model_used'])
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_403_does_not_retry_or_use_fallback(self, request_once, sleep):
+        request_once.side_effect = GeminiPermissionError(
+            'PERMISSION_DENIED', provider_status=403, model=self.primary_model,
+        )
+        with self.assertRaises(GeminiPermissionError):
+            generate_with_gemini_result(system='system', contents=[])
+        request_once.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_429_does_not_retry_or_use_fallback(self, request_once, sleep):
+        request_once.side_effect = GeminiQuotaError(
+            'RESOURCE_EXHAUSTED', provider_status=429, model=self.primary_model,
+        )
+        with self.assertRaises(GeminiQuotaError):
+            generate_with_gemini_result(system='system', contents=[])
+        request_once.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(
+        GEMINI_API_KEY='test-key', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=1,
+    )
+    @patch('core.diag_ia.gemini_service.time.sleep')
+    @patch('core.diag_ia.gemini_service.time.monotonic', side_effect=[0, 0, 1, 1])
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_global_timeout_stops_retry_chain(self, request_once, _monotonic, sleep):
+        request_once.side_effect = GeminiTimeout(
+            'TIMEOUT', duration_ms=1000, timed_out=True, model=self.primary_model,
+        )
+        with self.assertRaises(GeminiTimeout) as raised:
+            generate_with_gemini_result(system='system', contents=[])
+        self.assertEqual(raised.exception.provider_error, 'TOTAL_TIMEOUT')
+        request_once.assert_called_once()
+        sleep.assert_not_called()
+
+    @override_settings(
+        GEMINI_API_KEY='sensitive-test-value', GEMINI_MODEL='gemini-primary-model',
+        GEMINI_FALLBACK_MODEL='gemini-fallback-model', GEMINI_TIMEOUT_SECONDS=12,
+    )
+    @patch('core.diag_ia.gemini_service._request_once')
+    def test_retry_logs_never_expose_secret_or_prompt(self, request_once):
+        request_once.side_effect = GeminiPermissionError(
+            'unsafe detail containing sensitive-test-value', provider_status=403,
+            model=self.primary_model,
+        )
+        with self.assertLogs('diagpro.operations', level='WARNING') as logs:
+            with self.assertRaises(GeminiPermissionError):
+                generate_with_gemini_result(system='private system', contents=[{'text': 'private prompt'}])
+        rendered = ''.join(SafeJsonFormatter().format(record) for record in logs.records)
+        for forbidden in ('sensitive-test-value', 'private system', 'private prompt', 'unsafe detail'):
+            self.assertNotIn(forbidden, rendered)
+
+
+@override_settings(
+    GEMINI_API_KEY='test-key', GEMINI_MODEL='test-model', GEMINI_FALLBACK_MODEL='',
+    GEMINI_TIMEOUT_SECONDS=7, GEMINI_MAX_OUTPUT_TOKENS=300, GEMINI_MAX_RESPONSE_CHARS=5000,
+)
 class GeminiClientTests(APITestCase):
     def assert_provider_error(self, post, status, provider_error, expected_class):
         post.return_value.status_code = status
@@ -261,15 +467,18 @@ class GeminiClientTests(APITestCase):
         args, kwargs = post.call_args
         self.assertNotIn('test-key', args[0])
         self.assertEqual(kwargs['headers']['x-goog-api-key'], 'test-key')
-        self.assertEqual(kwargs['timeout'], 7)
+        self.assertGreater(kwargs['timeout'], 0)
+        self.assertLessEqual(kwargs['timeout'], 7)
 
+    @patch('core.diag_ia.gemini_service.time.sleep')
     @patch('core.diag_ia.gemini_service.requests.post', side_effect=requests.Timeout('secret-url'))
-    def test_timeout_is_translated_without_secret_text(self, _post):
+    def test_timeout_is_translated_without_secret_text(self, _post, sleep):
         with self.assertRaises(GeminiTimeout) as error:
             generate_with_gemini(system='system', contents=[])
         self.assertEqual(error.exception.provider_error, 'TIMEOUT')
         self.assertTrue(error.exception.timed_out)
         self.assertNotIn('secret-url', str(error.exception))
+        self.assertEqual(sleep.call_args_list, [call(1.0), call(2.0)])
 
     @patch('core.diag_ia.gemini_service.requests.post')
     def test_400_is_bad_request(self, post):
@@ -299,8 +508,9 @@ class GeminiClientTests(APITestCase):
     def test_429_is_quota_error(self, post):
         self.assert_provider_error(post, 429, 'RESOURCE_EXHAUSTED', GeminiQuotaError)
 
+    @patch('core.diag_ia.gemini_service.time.sleep')
     @patch('core.diag_ia.gemini_service.requests.post')
-    def test_500_and_503_are_provider_unavailable(self, post):
+    def test_500_and_503_are_provider_unavailable(self, post, _sleep):
         for status in (500, 503):
             with self.subTest(status=status):
                 self.assert_provider_error(post, status, 'UNAVAILABLE', GeminiUnavailable)

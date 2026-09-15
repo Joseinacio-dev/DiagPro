@@ -14,6 +14,7 @@ EVENTS = frozenset({
     'google_auth_started', 'google_auth_success', 'google_auth_failed',
     'diag_ia_success', 'diag_ia_failed',
     'diag_ia_provider_health_success', 'diag_ia_provider_health_failed',
+    'gemini_attempt_success', 'gemini_attempt_failed',
 })
 logger = logging.getLogger('diagpro.operations')
 SAFE_ERROR_TYPE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,79}$')
@@ -54,6 +55,16 @@ class SafeJsonFormatter(logging.Formatter):
             result['model'] = model
         if type(getattr(record, 'provider_timeout', None)) is bool:
             result['timeout'] = record.provider_timeout
+        attempt = getattr(record, 'provider_attempt', None)
+        if type(attempt) is int and 1 <= attempt <= 4:
+            result['attempt'] = attempt
+        if type(getattr(record, 'provider_retry', None)) is bool:
+            result['retry'] = record.provider_retry
+        if type(getattr(record, 'fallback_model_used', None)) is bool:
+            result['fallback_model_used'] = record.fallback_model_used
+        final_provider = getattr(record, 'final_provider', None)
+        if final_provider in {'gemini', 'local', 'unavailable'}:
+            result['final_provider'] = final_provider
         return json.dumps(result, ensure_ascii=True)
 
 

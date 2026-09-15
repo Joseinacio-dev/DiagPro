@@ -354,14 +354,17 @@ MERCADO_PAGO_LICENSE_DURATION_DAYS = int(os.environ.get('MERCADO_PAGO_LICENSE_DU
 # indisponibilidade segura e o desktop utiliza sua base local.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip()
+GEMINI_FALLBACK_MODEL = os.environ.get('GEMINI_FALLBACK_MODEL', 'gemini-3.5-flash-lite').strip()
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '12'))
 GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get('GEMINI_MAX_OUTPUT_TOKENS', '600'))
 GEMINI_MAX_RESPONSE_CHARS = int(os.environ.get('GEMINI_MAX_RESPONSE_CHARS', '5000'))
-if not 1 <= GEMINI_TIMEOUT_SECONDS <= 30:
-    raise ImproperlyConfigured('GEMINI_TIMEOUT_SECONDS deve estar entre 1 e 30.')
+if not 1 <= GEMINI_TIMEOUT_SECONDS <= 15:
+    raise ImproperlyConfigured('GEMINI_TIMEOUT_SECONDS deve estar entre 1 e 15.')
 if not 128 <= GEMINI_MAX_OUTPUT_TOKENS <= 2048:
     raise ImproperlyConfigured('GEMINI_MAX_OUTPUT_TOKENS deve estar entre 128 e 2048.')
 if not 500 <= GEMINI_MAX_RESPONSE_CHARS <= 10000:
     raise ImproperlyConfigured('GEMINI_MAX_RESPONSE_CHARS deve estar entre 500 e 10000.')
 if GEMINI_MODEL and not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,79}', GEMINI_MODEL):
     raise ImproperlyConfigured('GEMINI_MODEL possui formato inválido.')
+if GEMINI_FALLBACK_MODEL and not re.fullmatch(r'[a-z0-9][a-z0-9._-]{0,79}', GEMINI_FALLBACK_MODEL):
+    raise ImproperlyConfigured('GEMINI_FALLBACK_MODEL possui formato inválido.')

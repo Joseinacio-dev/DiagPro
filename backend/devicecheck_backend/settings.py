@@ -355,11 +355,17 @@ MERCADO_PAGO_LICENSE_DURATION_DAYS = int(os.environ.get('MERCADO_PAGO_LICENSE_DU
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '').strip()
 GEMINI_MODEL = os.environ.get('GEMINI_MODEL', '').strip()
 GEMINI_FALLBACK_MODEL = os.environ.get('GEMINI_FALLBACK_MODEL', 'gemini-3.5-flash-lite').strip()
-GEMINI_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_TIMEOUT_SECONDS', '12'))
+GEMINI_GLOBAL_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_GLOBAL_TIMEOUT_SECONDS', '20'))
+GEMINI_PRIMARY_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_PRIMARY_TIMEOUT_SECONDS', '10'))
+GEMINI_FALLBACK_TIMEOUT_SECONDS = int(os.environ.get('GEMINI_FALLBACK_TIMEOUT_SECONDS', '6'))
 GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get('GEMINI_MAX_OUTPUT_TOKENS', '600'))
 GEMINI_MAX_RESPONSE_CHARS = int(os.environ.get('GEMINI_MAX_RESPONSE_CHARS', '5000'))
-if not 1 <= GEMINI_TIMEOUT_SECONDS <= 15:
-    raise ImproperlyConfigured('GEMINI_TIMEOUT_SECONDS deve estar entre 1 e 15.')
+if not 18 <= GEMINI_GLOBAL_TIMEOUT_SECONDS <= 20:
+    raise ImproperlyConfigured('GEMINI_GLOBAL_TIMEOUT_SECONDS deve estar entre 18 e 20.')
+if not 1 <= GEMINI_PRIMARY_TIMEOUT_SECONDS <= 10:
+    raise ImproperlyConfigured('GEMINI_PRIMARY_TIMEOUT_SECONDS deve estar entre 1 e 10.')
+if not 1 <= GEMINI_FALLBACK_TIMEOUT_SECONDS <= 10:
+    raise ImproperlyConfigured('GEMINI_FALLBACK_TIMEOUT_SECONDS deve estar entre 1 e 10.')
 if not 128 <= GEMINI_MAX_OUTPUT_TOKENS <= 2048:
     raise ImproperlyConfigured('GEMINI_MAX_OUTPUT_TOKENS deve estar entre 128 e 2048.')
 if not 500 <= GEMINI_MAX_RESPONSE_CHARS <= 10000:

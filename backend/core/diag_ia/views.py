@@ -20,7 +20,8 @@ class IsStaffOrSuperuser(BasePermission):
 
 def _provider_health_payload(
     *, success, configured, primary_model, fallback_model, model_used,
-    primary_status, fallback_status, provider_code, error_class, duration_ms, attempts,
+    primary_status, primary_code, fallback_status, fallback_code,
+    fallback_model_used, provider_code, error_class, duration_ms, attempts,
 ):
     return {
         'provider': 'gemini',
@@ -30,11 +31,14 @@ def _provider_health_payload(
         'success': success,
         'model_used': model_used,
         'primary_status': primary_status,
+        'primary_code': primary_code,
         'fallback_status': fallback_status,
+        'fallback_code': fallback_code,
+        'fallback_model_used': fallback_model_used,
         'provider_code': provider_code,
         'error_class': error_class,
         'duration_ms': max(0, min(int(duration_ms), 300_000)),
-        'attempts': max(1, min(int(attempts), 4)),
+        'attempts': max(1, min(int(attempts), 3)),
     }
 
 
@@ -83,7 +87,10 @@ class DiagIaProviderHealthView(APIView):
                 fallback_model=configuration['fallback_model'],
                 model_used=None,
                 primary_status=exc.primary_status,
+                primary_code=exc.primary_code,
                 fallback_status=exc.fallback_status,
+                fallback_code=exc.fallback_code,
+                fallback_model_used=exc.fallback_model_used,
                 provider_code=exc.provider_error,
                 error_class=type(exc).__name__,
                 duration_ms=exc.duration_ms,
@@ -106,7 +113,10 @@ class DiagIaProviderHealthView(APIView):
             fallback_model=configuration['fallback_model'],
             model_used=result.model_used,
             primary_status=result.primary_status,
+            primary_code=result.primary_code,
             fallback_status=result.fallback_status,
+            fallback_code=result.fallback_code,
+            fallback_model_used=result.fallback_model_used,
             provider_code='OK',
             error_class=None,
             duration_ms=result.duration_ms,

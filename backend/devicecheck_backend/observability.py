@@ -50,6 +50,9 @@ class SafeJsonFormatter(logging.Formatter):
         duration = getattr(record, 'request_duration_ms', None)
         if type(duration) is int and 0 <= duration <= 300_000:
             result['request_duration_ms'] = duration
+        remaining_budget = getattr(record, 'remaining_budget_ms', None)
+        if type(remaining_budget) is int and 0 <= remaining_budget <= 300_000:
+            result['remaining_budget_ms'] = remaining_budget
         model = getattr(record, 'provider_model', None)
         if isinstance(model, str) and SAFE_MODEL.fullmatch(model):
             result['model'] = model

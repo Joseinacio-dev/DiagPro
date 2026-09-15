@@ -11,8 +11,8 @@ from devicecheck_backend.observability import logger
 
 
 SAFE_PROVIDER_ERROR = re.compile(r'^[A-Z][A-Z0-9_]{0,63}$')
-PRIMARY_ATTEMPTS = 3
-RETRY_BACKOFF_SECONDS = (1.0, 2.0)
+PRIMARY_ATTEMPTS = 2
+RETRY_BACKOFF_SECONDS = (1.0,)
 MIN_REQUEST_TIMEOUT_SECONDS = 0.1
 
 
@@ -25,6 +25,8 @@ class GeminiResult:
     attempts: int
     duration_ms: int
     fallback_model_used: bool
+    primary_code: str | None = None
+    fallback_code: str | None = None
 
 
 class GeminiUnavailable(Exception):
@@ -42,6 +44,8 @@ class GeminiUnavailable(Exception):
         primary_status=None,
         fallback_status=None,
         fallback_model_used=False,
+        primary_code=None,
+        fallback_code=None,
     ):
         safe_error = (
             provider_error
@@ -59,6 +63,8 @@ class GeminiUnavailable(Exception):
         self.primary_status = primary_status if type(primary_status) is int and 100 <= primary_status <= 599 else None
         self.fallback_status = fallback_status if type(fallback_status) is int and 100 <= fallback_status <= 599 else None
         self.fallback_model_used = fallback_model_used is True
+        self.primary_code = primary_code if isinstance(primary_code, str) and SAFE_PROVIDER_ERROR.fullmatch(primary_code) else None
+        self.fallback_code = fallback_code if isinstance(fallback_code, str) and SAFE_PROVIDER_ERROR.fullmatch(fallback_code) else None
 
 
 class GeminiAuthenticationError(GeminiUnavailable):
@@ -178,7 +184,14 @@ def _is_transient(exc):
     )
 
 
-def _log_attempt(*, success, exc=None, model, attempt, retry, fallback_model_used, duration_ms, final_provider=None):
+def _remaining_budget_ms(deadline):
+    return max(0, round((deadline - time.monotonic()) * 1000))
+
+
+def _log_attempt(
+    *, success, exc=None, model, attempt, retry, fallback_model_used,
+    duration_ms, remaining_budget_ms, final_provider=None,
+):
     extra = {
         'provider': 'Gemini',
         'provider_model': model,
@@ -186,6 +199,7 @@ def _log_attempt(*, success, exc=None, model, attempt, retry, fallback_model_use
         'provider_retry': retry,
         'fallback_model_used': fallback_model_used,
         'request_duration_ms': duration_ms,
+        'remaining_budget_ms': remaining_budget_ms,
     }
     if success:
         extra.update({'provider_status': 200, 'provider_error': 'OK'})
@@ -205,16 +219,21 @@ def _log_attempt(*, success, exc=None, model, attempt, retry, fallback_model_use
     )
 
 
-def _enrich_error(exc, *, started, attempts, primary_status, fallback_status=None, fallback_model_used=False):
+def _enrich_error(
+    exc, *, started, attempts, primary_status, primary_code,
+    fallback_status=None, fallback_code=None, fallback_model_used=False,
+):
     exc.duration_ms = max(0, min(_duration_ms(started), 300_000))
     exc.attempts = attempts
     exc.primary_status = primary_status
+    exc.primary_code = primary_code
     exc.fallback_status = fallback_status
+    exc.fallback_code = fallback_code
     exc.fallback_model_used = fallback_model_used
     return exc
 
 
-def _global_timeout(*, started, attempts, primary_status, model, fallback_model_used=False):
+def _global_timeout(*, started, attempts, primary_status, primary_code, model, fallback_model_used=False):
     return GeminiTimeout(
         'TOTAL_TIMEOUT',
         provider_status=primary_status,
@@ -223,6 +242,7 @@ def _global_timeout(*, started, attempts, primary_status, model, fallback_model_
         model=model,
         attempts=attempts,
         primary_status=primary_status,
+        primary_code=primary_code,
         fallback_model_used=fallback_model_used,
     )
 
@@ -237,8 +257,12 @@ def generate_with_gemini_result(*, system, contents):
     if not primary_model:
         raise GeminiModelError('MODEL_NOT_CONFIGURED', duration_ms=_duration_ms(started))
 
-    deadline = started + settings.GEMINI_TIMEOUT_SECONDS
+    deadline = started + settings.GEMINI_GLOBAL_TIMEOUT_SECONDS
+    primary_timeout = settings.GEMINI_PRIMARY_TIMEOUT_SECONDS
+    fallback_timeout = settings.GEMINI_FALLBACK_TIMEOUT_SECONDS
+    has_fallback = bool(fallback_model and fallback_model != primary_model)
     last_error = None
+    last_primary_status = None
     attempts = 0
     for attempt in range(1, PRIMARY_ATTEMPTS + 1):
         remaining = deadline - time.monotonic()
@@ -246,7 +270,8 @@ def generate_with_gemini_result(*, system, contents):
             raise _global_timeout(
                 started=started,
                 attempts=max(1, attempts),
-                primary_status=last_error.provider_status if last_error else None,
+                primary_status=last_primary_status,
+                primary_code=last_error.provider_error if last_error else 'TOTAL_TIMEOUT',
                 model=primary_model,
             )
         attempts += 1
@@ -255,20 +280,25 @@ def generate_with_gemini_result(*, system, contents):
                 model=primary_model,
                 system=system,
                 contents=contents,
-                timeout_seconds=remaining,
+                timeout_seconds=min(primary_timeout, remaining),
             )
         except GeminiUnavailable as exc:
             last_error = exc
+            if exc.provider_status is not None:
+                last_primary_status = exc.provider_status
             transient = _is_transient(exc)
-            delay = RETRY_BACKOFF_SECONDS[attempt - 1] if attempt < PRIMARY_ATTEMPTS else 0
-            retry = transient and attempt < PRIMARY_ATTEMPTS and deadline - time.monotonic() > delay
-            fallback_next = (
+            remaining_after_attempt = max(0.0, deadline - time.monotonic())
+            delay = RETRY_BACKOFF_SECONDS[attempt - 1] if attempt < PRIMARY_ATTEMPTS else 0.0
+            reserved_fallback = fallback_timeout if has_fallback else 0.0
+            retry_budget = delay + primary_timeout + reserved_fallback
+            retry = (
                 transient
-                and attempt == PRIMARY_ATTEMPTS
-                and fallback_model
-                and fallback_model != primary_model
+                and not isinstance(exc, GeminiTimeout)
+                and attempt < PRIMARY_ATTEMPTS
+                and remaining_after_attempt >= retry_budget
             )
-            final_provider = None if retry or fallback_next else 'unavailable'
+            fallback_possible = transient and has_fallback and remaining_after_attempt > MIN_REQUEST_TIMEOUT_SECONDS
+            final_provider = None if retry or fallback_possible else 'unavailable'
             _log_attempt(
                 success=False,
                 exc=exc,
@@ -277,6 +307,7 @@ def generate_with_gemini_result(*, system, contents):
                 retry=retry,
                 fallback_model_used=False,
                 duration_ms=exc.duration_ms,
+                remaining_budget_ms=round(remaining_after_attempt * 1000),
                 final_provider=final_provider,
             )
             if not transient:
@@ -285,15 +316,9 @@ def generate_with_gemini_result(*, system, contents):
                     started=started,
                     attempts=attempts,
                     primary_status=exc.provider_status,
+                    primary_code=exc.provider_error,
                 )
-            if attempt < PRIMARY_ATTEMPTS:
-                if not retry:
-                    raise _global_timeout(
-                        started=started,
-                        attempts=attempts,
-                        primary_status=exc.provider_status,
-                        model=primary_model,
-                    )
+            if retry:
                 time.sleep(delay)
                 continue
             break
@@ -304,6 +329,7 @@ def generate_with_gemini_result(*, system, contents):
             retry=False,
             fallback_model_used=False,
             duration_ms=attempt_duration,
+            remaining_budget_ms=_remaining_budget_ms(deadline),
             final_provider='gemini',
         )
         return GeminiResult(
@@ -314,16 +340,19 @@ def generate_with_gemini_result(*, system, contents):
             attempts=attempts,
             duration_ms=_duration_ms(started),
             fallback_model_used=False,
+            primary_code='OK',
         )
 
-    primary_status = last_error.provider_status if last_error else None
-    if fallback_model and fallback_model != primary_model:
+    primary_status = last_primary_status
+    primary_code = last_error.provider_error if last_error else None
+    if has_fallback:
         remaining = deadline - time.monotonic()
         if remaining <= MIN_REQUEST_TIMEOUT_SECONDS:
             raise _global_timeout(
                 started=started,
                 attempts=attempts,
                 primary_status=primary_status,
+                primary_code=primary_code or 'TOTAL_TIMEOUT',
                 model=primary_model,
             )
         attempts += 1
@@ -332,17 +361,18 @@ def generate_with_gemini_result(*, system, contents):
                 model=fallback_model,
                 system=system,
                 contents=contents,
-                timeout_seconds=remaining,
+                timeout_seconds=min(fallback_timeout, remaining),
             )
         except GeminiUnavailable as exc:
             _log_attempt(
                 success=False,
                 exc=exc,
                 model=fallback_model,
-                attempt=attempts,
+                attempt=1,
                 retry=False,
                 fallback_model_used=True,
                 duration_ms=exc.duration_ms,
+                remaining_budget_ms=_remaining_budget_ms(deadline),
                 final_provider='unavailable',
             )
             raise _enrich_error(
@@ -350,16 +380,19 @@ def generate_with_gemini_result(*, system, contents):
                 started=started,
                 attempts=attempts,
                 primary_status=primary_status,
+                primary_code=primary_code,
                 fallback_status=exc.provider_status,
+                fallback_code=exc.provider_error,
                 fallback_model_used=True,
             )
         _log_attempt(
             success=True,
             model=fallback_model,
-            attempt=attempts,
+            attempt=1,
             retry=False,
             fallback_model_used=True,
             duration_ms=attempt_duration,
+            remaining_budget_ms=_remaining_budget_ms(deadline),
             final_provider='gemini',
         )
         return GeminiResult(
@@ -370,6 +403,8 @@ def generate_with_gemini_result(*, system, contents):
             attempts=attempts,
             duration_ms=_duration_ms(started),
             fallback_model_used=True,
+            primary_code=primary_code,
+            fallback_code='OK',
         )
 
     raise _enrich_error(
@@ -377,6 +412,7 @@ def generate_with_gemini_result(*, system, contents):
         started=started,
         attempts=attempts,
         primary_status=primary_status,
+        primary_code=primary_code,
     )
 
 

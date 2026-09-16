@@ -13,6 +13,10 @@
 - Lembrar-me: refresh token protegido pelo `safeStorage` do Electron/DPAPI no Windows; access token fica em memória. Sessões antigas em `localStorage` são migradas e removidas.
 - Suporte: chamados autenticados persistidos; usuários acessam somente os próprios registros e staff pode atender todos.
 
+### Implantação obrigatória do backend
+
+O deploy que receber este código precisa executar `python manage.py migrate` antes de liberar o endpoint de chamados, pois a migration `0011_supportticket` cria a tabela necessária. Em seguida, executar `python manage.py collectstatic --noinput` para publicar a tela de nova senha. Confirmar esses passos no comando de build/pre-deploy do Render; não aplicar a migration manualmente em banco de produção fora do processo de deploy.
+
 ## Configuração necessária para recuperação de senha
 
 Configurar no ambiente do backend, sem gravar valores no repositório:

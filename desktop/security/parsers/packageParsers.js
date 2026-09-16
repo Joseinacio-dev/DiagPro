@@ -32,7 +32,7 @@ function parsePackageList(output = '', type = 'user') {
     .filter(Boolean)
     .map((line) => {
       const withoutPrefix = line.replace(/^package:/, '')
-      if (type !== 'user' || !withoutPrefix.includes('=')) {
+      if (!withoutPrefix.includes('=')) {
         return { packageName: withoutPrefix.split(/\s+/)[0], apkPath: null }
       }
       const separator = withoutPrefix.lastIndexOf('=')

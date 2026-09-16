@@ -49,6 +49,12 @@
 .scanner-stages small { color: #718096; }
 .scanner-stages .scanner-stage-running { color: #2da6ff; }
 .scanner-stages .scanner-stage-unavailable { color: #f5b942; }
+.scanner-stages .scanner-stage-partial { color: #f5b942; }
+.scanner-stages .scanner-stage-failed,
+.scanner-stages .scanner-stage-canceled,
+.scanner-stages .scanner-stage-device_disconnected { color: #ff6b75; }
+.scanner-stages .scanner-stage-copy { display: flex; flex-direction: column; gap: 2px; }
+.scanner-stages .scanner-stage-copy em { color: #d3a762; font-size: 10px; font-style: normal; }
 .scanner-stages .scanner-stage-waiting { width: 9px; height: 9px; margin-left: 3px; border: 1px solid #52647a; border-radius: 50%; }
 .scanner-result-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .scanner-result-grid > div { min-height: 120px; display: flex; flex-direction: column; gap: 5px; padding: 13px; border: 1px solid #213148; border-radius: 7px; background: #142233; color: #2da6ff; }

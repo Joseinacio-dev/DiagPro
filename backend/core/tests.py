@@ -158,6 +158,40 @@ class DiagnosticoApiTests(APITestCase):
         self.assertEqual(resposta.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resposta.data['resultado_tecnico']['status'], 'partial')
 
+    def test_scanner_completo_persiste_modulos_e_cobertura_novos(self):
+        technical = {
+            'status': 'partial',
+            'mode': 'complete',
+            'finishedAt': self.fim.isoformat(),
+            'files': {
+                'status': 'partial', 'collectionState': 'PARTIAL',
+                'found': 12, 'analyzed': 12, 'itemsPersisted': False,
+            },
+            'fileCoverage': {'status': 'partial', 'found': 12, 'analyzed': 12},
+            'persistence': {'status': 'partial'},
+            'coverage': {'device': {'status': 'limited'}},
+            'moduleStatus': {'files': 'partial', 'persistence': 'partial'},
+            'durationMs': 12345,
+            'warnings': [{'stage': 'files', 'code': 'PARTIAL_FILE_COLLECTION'}],
+            'limitations': ['Área privada inacessível sem root.'],
+        }
+        modules = [
+            'system', 'apps', 'permissions', 'security', 'battery', 'storage',
+            'performance', 'files', 'persistence',
+        ]
+
+        resposta = self.criar_para(
+            self.usuario,
+            modo='complete',
+            modulos=modules,
+            resultado_tecnico=technical,
+        )
+
+        self.assertEqual(resposta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resposta.data['modulos'], modules)
+        self.assertEqual(resposta.data['resultado_tecnico']['fileCoverage']['found'], 12)
+        self.assertEqual(resposta.data['resultado_tecnico']['durationMs'], 12345)
+
 
 class DiagnosticLicenseEnforcementApiTests(APITestCase):
     def setUp(self):

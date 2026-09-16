@@ -14,15 +14,17 @@ const EMPTY_VALUE = '--'
 const MODE_LABELS = { quick: 'Rápida', complete: 'Completa', custom: 'Personalizada' }
 const MODULE_LABELS = {
   system: 'Sistema', apps: 'Aplicativos', security: 'Segurança', permissions: 'Permissões',
-  battery: 'Bateria', storage: 'Armazenamento', performance: 'Desempenho',
+  battery: 'Bateria', storage: 'Armazenamento', performance: 'Desempenho', files: 'Arquivos',
+  persistence: 'Persistência/configurações', userApps: 'Apps do usuário', systemApps: 'Apps de sistema',
 }
 const STAGE_LABELS = {
   identification: 'Identificação', system: 'Sistema', apps: 'Aplicativos', permissions: 'Permissões',
-  security: 'Segurança', battery: 'Bateria', storage: 'Armazenamento',
+  files: 'Arquivos', security: 'Segurança', persistence: 'Persistência/configurações', battery: 'Bateria', storage: 'Armazenamento',
   performance: 'Desempenho', consolidation: 'Consolidação',
 }
 const STAGE_STATUS = {
-  completed: 'Concluída', unavailable: 'Indisponível', running: 'Em andamento', waiting: 'Aguardando',
+  completed: 'Concluído', partial: 'Parcial', unavailable: 'Indisponível', failed: 'Falhou',
+  canceled: 'Cancelado', device_disconnected: 'Dispositivo desconectado', running: 'Em andamento', waiting: 'Aguardando',
 }
 const FINDING_SEVERITY = {
   info: 'Informativo', low: 'Baixo', medium: 'Médio', high: 'Alto', critical: 'Crítico',
@@ -428,7 +430,7 @@ function ReportsPage({ accessToken, diagnosticId = null }) {
 
                 <section className="dp-report-detail-section"><h3><AlertTriangle size={16} /> Avisos</h3>{Array.isArray(selected.warnings) && selected.warnings.length > 0 ? <div className="dp-report-warning-list">{selected.warnings.map((warning, index) => <div key={`${warning?.stage || 'warning'}-${index}`}><strong>{showValue(warning?.stage)}</strong><span>{showValue(warning?.message)}</span>{warning?.code && <small>{warning.code}</small>}</div>)}</div> : <p className="dp-report-no-data">{Array.isArray(selected.warnings) ? 'Nenhum warning registrado nesta coleta.' : 'Não disponível.'}</p>}</section>
 
-                <section className="dp-report-detail-section"><h3><Clock3 size={16} /> Etapas</h3>{selected.stages && Object.keys(selected.stages).length > 0 ? <div className="dp-report-stage-list">{Object.entries(selected.stages).map(([stageId, stage]) => <div key={stageId}>{stage?.status === 'completed' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}<strong>{STAGE_LABELS[stageId] || stageId}</strong><span>{STAGE_STATUS[stage?.status] || showValue(stage?.status)}</span></div>)}</div> : <p className="dp-report-no-data">Nenhuma etapa registrada.</p>}</section>
+                <section className="dp-report-detail-section"><h3><Clock3 size={16} /> Etapas</h3>{selected.stages && Object.keys(selected.stages).length > 0 ? <div className="dp-report-stage-list">{Object.entries(selected.stages).map(([stageId, stage]) => <div key={stageId}>{stage?.status === 'completed' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}<strong>{STAGE_LABELS[stageId] || stageId}{stage?.error?.message ? ` — ${stage.error.message}` : ''}</strong><span>{STAGE_STATUS[stage?.status] || showValue(stage?.status)}{Number.isFinite(stage?.durationMs) ? ` · ${stage.durationMs} ms` : ''}</span></div>)}</div> : <p className="dp-report-no-data">Nenhuma etapa registrada.</p>}</section>
 
                 <p className="dp-report-disclaimer">Este relatório apresenta somente os sinais técnicos coletados e não certifica ausência de malware.</p>
               </div>

@@ -59,10 +59,19 @@ function createScanCoordinator() {
     return aborted
   }
 
+  function cancelAll(reason = createAdbError(ADB_ERROR_CODES.OPERATION_CANCELED)) {
+    const canceled = []
+    operationsBySerial.forEach((operation) => {
+      if (cancelOperation(operation.id, reason)) canceled.push(operation.id)
+    })
+    return canceled
+  }
+
   return {
     abortDisconnected,
     beginOperation,
     beginScan,
+    cancelAll,
     cancelOperation,
     cancelScan,
     finishOperation,

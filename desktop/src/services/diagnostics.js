@@ -1,43 +1,8 @@
 import { fetchAutenticado } from '../utils/auth.js'
 import { apiUrl } from '../config/api.js'
+import { persistirDiagnostico } from './diagnosticPersistence.mjs'
 
 const DIAGNOSTICS_URL = apiUrl('/api/diagnosticos/')
-
-function criarPayloadDiagnostico(resultado, serial) {
-  const device = resultado?.device || resultado?.system || {}
-  const health = resultado?.health || {}
-  const apps = resultado?.apps
-
-  return {
-    serial,
-    fabricante: device.manufacturer || '',
-    modelo: device.model || '',
-    versao_android: device.androidVersion || '',
-    sdk: device.sdk ?? null,
-    security_patch: resultado?.security?.securityPatch ?? device.securityPatch ?? null,
-    modo: resultado?.mode,
-    modulos: resultado?.modules,
-    iniciado_em: resultado?.startedAt,
-    finalizado_em: resultado?.finishedAt,
-    health_available: health.available ?? null,
-    health_score: health.score ?? null,
-    health_label: health.label || '',
-    health_explanation: health.explanation || '',
-    bateria: resultado?.battery ?? null,
-    armazenamento: resultado?.storage ?? null,
-    memoria: resultado?.memory ?? null,
-    apps: apps
-      ? {
-          total: apps.total ?? null,
-          userTotal: apps.userTotal ?? null,
-          systemTotal: apps.systemTotal ?? null,
-        }
-      : null,
-    warnings: resultado?.warnings || [],
-    stages: resultado?.stages || {},
-    resultado_tecnico: resultado,
-  }
-}
 
 async function lerResposta(resposta) {
   try {
@@ -55,18 +20,13 @@ function criarErroApi(resposta, dados, mensagem) {
 }
 
 export async function salvarDiagnostico(resultado, { serial, accessToken } = {}) {
-  const resposta = await fetchAutenticado(DIAGNOSTICS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(criarPayloadDiagnostico(resultado, serial)),
-  }, accessToken)
-  const dados = await lerResposta(resposta)
-
-  if (!resposta.ok) {
-    throw criarErroApi(resposta, dados, 'Não foi possível salvar o diagnóstico no histórico.')
-  }
-
-  return dados
+  return persistirDiagnostico({
+    resultado,
+    serial,
+    accessToken,
+    diagnosticsUrl: DIAGNOSTICS_URL,
+    fetchAuthenticated: fetchAutenticado,
+  })
 }
 
 export async function salvarRemediacao(diagnosticoId, remediation, { accessToken } = {}) {

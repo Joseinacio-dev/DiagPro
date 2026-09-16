@@ -18,7 +18,9 @@ test('coleta de pacotes usa dump em lote e não calcula hashes automaticamente',
     async runDevice(_serial, args) {
       commands.push(args.join(' '))
       if (args.join(' ') === 'shell pm list packages -3 -f') return fixture('package-list-user.txt')
-      if (args.join(' ') === 'shell pm list packages -s') return 'package:android\npackage:com.android.settings'
+      if (args.join(' ') === 'shell pm list packages -s -f') {
+        return 'package:/system/framework/framework-res.apk=android\npackage:/system/priv-app/Settings/Settings.apk=com.android.settings'
+      }
       if (args.join(' ') === 'shell dumpsys package packages') return fixture('package-dump.txt')
       throw new Error(`Comando inesperado: ${args.join(' ')}`)
     },
@@ -47,9 +49,45 @@ test('coleta de pacotes usa dump em lote e não calcula hashes automaticamente',
   assert.equal(result.collection.details.strategy, 'bulk')
   assert.equal(result.collection.details.fallbackCommands, 0)
   assert.equal(result.collection.hash.reason, 'HASH_DEFERRED')
+  assert.equal(result.items.find((app) => app.packageName === 'com.android.settings').apkPath, '/system/priv-app/Settings/Settings.apk')
   assert.equal(result.items.find((app) => app.packageName === 'com.example.safe').securityDetails.integrity.hash.reason, 'HASH_DEFERRED')
   assert.equal(commands.filter((command) => command.includes('dumpsys package')).length, 1)
   assert.equal(commands.filter((command) => command.includes('sha256sum')).length, 0)
+})
+
+test('modo completo pode detalhar aplicativos de sistema sem tratá-los como removíveis', async () => {
+  const commands = []
+  const adb = {
+    async runDevice(_serial, args) {
+      const command = args.join(' ')
+      commands.push(command)
+      if (command === 'shell pm list packages -3 -f') return ''
+      if (command === 'shell pm list packages -s -f') return 'package:/system/app/Safe/base.apk=com.example.safe'
+      if (command === 'shell dumpsys package packages') return fixture('package-dump.txt')
+      throw new Error(`Comando inesperado: ${command}`)
+    },
+  }
+  const collector = createPackageCollector({
+    adb,
+    deviceCollector: {},
+    securityCollector: {
+      collectAccessibilityServices: async () => ({ status: 'available', value: [], reason: null }),
+      collectAppOps: async () => ({ operations: {} }),
+    },
+  })
+
+  const result = await collector.listInstalledApps('TEST-SERIAL', {
+    includeSecurityDetails: true,
+    detailTypes: ['user', 'system'],
+    currentUserId: 0,
+  })
+
+  assert.equal(result.systemTotal, 1)
+  assert.equal(result.analysis.detailedRequested, 1)
+  assert.equal(result.analysis.detailedAnalyzed, 1)
+  assert.equal(result.items[0].type, 'system')
+  assert.equal(result.items[0].securityDetails.available, true)
+  assert.equal(commands.filter((command) => command === 'shell dumpsys package packages').length, 1)
 })
 
 test('coleta usa fallback limitado quando dump global não contém pacote', async () => {
@@ -59,7 +97,7 @@ test('coleta usa fallback limitado quando dump global não contém pacote', asyn
       const command = args.join(' ')
       commands.push(command)
       if (command === 'shell pm list packages -3 -f') return 'package:/data/app/com.example.one/base.apk=com.example.one'
-      if (command === 'shell pm list packages -s') return ''
+      if (command === 'shell pm list packages -s -f') return ''
       if (command === 'shell dumpsys package packages') return 'saída parcial sem blocos'
       if (command === 'shell dumpsys package com.example.one') return fixture('package-dump.txt').split('Package [com.example.partial]')[0]
       throw new Error(`Comando inesperado: ${command}`)

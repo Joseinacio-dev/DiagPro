@@ -70,3 +70,14 @@ test('desconexão aborta remediação ativa além do scan', () => {
   assert.deepEqual(aborted, ['action-one'])
   assert.equal(controller.signal.reason.code, ADB_ERROR_CODES.DEVICE_DISCONNECTED)
 })
+
+test('encerramento cancela todas as operações ADB pendentes', () => {
+  const coordinator = createScanCoordinator()
+  const scan = new AbortController()
+  const apps = new AbortController()
+  coordinator.beginScan({ scanId: 'scan-one', serial: 'SERIAL-1', controller: scan })
+  coordinator.beginOperation('SERIAL-2', 'apps', 'apps-one', { controller: apps })
+  assert.deepEqual(coordinator.cancelAll().sort(), ['apps-one', 'scan-one'])
+  assert.equal(scan.signal.aborted, true)
+  assert.equal(apps.signal.aborted, true)
+})

@@ -8,10 +8,12 @@ import ManagementPage from './pages/ManagementPage.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import ScannerPage from './pages/ScannerPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import SupportPage from './pages/SupportPage.jsx'
 import SubscriptionPage from './pages/SubscriptionPage.jsx'
 import ThreatsPage from './pages/ThreatsPage.jsx'
 import PlaceholderPage from './pages/PlaceholderPage.jsx'
 import useDeviceStatus from './hooks/useDeviceStatus.js'
+import useStartupStatus from './hooks/useStartupStatus.js'
 import { salvarTokens, limparTokens, renovarSessao } from './utils/auth.js'
 import { reconcileScanSession, sessionForConnectedDevice } from './utils/scanSession.mjs'
 
@@ -23,7 +25,9 @@ function App() {
   const [verificandoSessao, setVerificandoSessao] = useState(true)
   const [scanSession, setScanSession] = useState(null)
   const [scannerRequest, setScannerRequest] = useState(null)
+  const [diagIaOpen, setDiagIaOpen] = useState(false)
   const dispositivo = useDeviceStatus()
+  const startupStatus = useStartupStatus()
 
   useEffect(() => {
     setScanSession((current) => reconcileScanSession(current, dispositivo))
@@ -57,6 +61,7 @@ function App() {
     setSelectedDiagnosticId(null)
     setScanSession(null)
     setScannerRequest(null)
+    setDiagIaOpen(false)
     limparTokens()
   }
 
@@ -87,11 +92,12 @@ function App() {
   }
 
   if (!token) {
-    return <Login onLoginSuccess={handleLoginSuccess} />
+    return <Login onLoginSuccess={handleLoginSuccess} startupStatus={startupStatus} deviceStatus={dispositivo} />
   }
 
+  const currentScanSession = sessionForConnectedDevice(scanSession, dispositivo)
+
   function renderPage() {
-    const currentScanSession = sessionForConnectedDevice(scanSession, dispositivo)
     if (activePage === 'Dashboard') return <DashboardPage username={username} dispositivo={dispositivo} scanSession={currentScanSession} onOpenScanner={openScanner} onNavigate={handleNavigate} />
     if (activePage === 'Scanner') return <ScannerPage accessToken={token} onNavigate={handleNavigate} dispositivo={dispositivo} initialMode={scannerRequest?.mode} scanSession={currentScanSession} onScanSessionChange={setScanSession} />
     if (activePage === 'Dispositivos') return <DevicesPage accessToken={token} dispositivo={dispositivo} scanResult={currentScanSession?.result || null} onOpenScanner={() => openScanner()} onStartDiagnostic={() => openScanner()} onOpenReport={openDiagnosticReport} />
@@ -99,13 +105,14 @@ function App() {
     if (activePage === 'Relatórios') return <ReportsPage accessToken={token} diagnosticId={selectedDiagnosticId} />
     if (activePage === 'Clientes') return <ClientsPage accessToken={token} onOpenReport={openDiagnosticReport} />
     if (activePage === 'Visão Gerencial') return <ManagementPage accessToken={token} onOpenReport={openDiagnosticReport} />
-    if (activePage === 'Configurações') return <SettingsPage accessToken={token} onLogout={handleLogout} />
+    if (activePage === 'Configurações') return <SettingsPage accessToken={token} startupStatus={startupStatus} device={dispositivo} scanSession={currentScanSession} onNavigate={handleNavigate} />
     if (activePage === 'Plano e assinatura') return <SubscriptionPage accessToken={token} />
+    if (activePage === 'Suporte') return <SupportPage startupStatus={startupStatus} device={dispositivo} scanSession={currentScanSession} onOpenDiagIa={() => setDiagIaOpen(true)} />
     return <PlaceholderPage title={activePage} />
   }
 
   return (
-    <AppLayout username={username} onLogout={handleLogout} activePage={activePage} onNavigate={handleNavigate}>
+    <AppLayout username={username} onLogout={handleLogout} activePage={activePage} onNavigate={handleNavigate} startupStatus={startupStatus} device={dispositivo} scanSession={currentScanSession} diagIaOpen={diagIaOpen} onDiagIaOpenChange={setDiagIaOpen}>
       {renderPage()}
     </AppLayout>
   )

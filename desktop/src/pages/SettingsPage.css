@@ -7,6 +7,7 @@
 .dp-settings-tabs button { display: flex; width: 100%; align-items: center; gap: 9px; border: 0; border-radius: 8px; padding: 10px 11px; background: transparent; color: #94a3b8; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600; text-align: left; }
 .dp-settings-tabs button:hover { background: #172033; color: #cbd5e1; }
 .dp-settings-tabs button.active { background: #172554; color: #93c5fd; }
+.dp-settings-tabs button small { margin-left: auto; border-radius: 999px; padding: 2px 5px; background: #1e3a5f; color: #7dd3fc; font-size: 7px; }
 .dp-settings-content { min-width: 0; }
 .dp-settings-panel { overflow: hidden; border: 1px solid #1e293b; border-radius: 12px; background: #111827; }
 .dp-settings-panel > header { display: flex; align-items: center; gap: 11px; padding: 17px 19px; border-bottom: 1px solid #1e293b; }
@@ -24,6 +25,7 @@
 .dp-settings-actions { display: flex; justify-content: flex-end; margin-top: 18px; padding: 14px 0 17px; border-top: 1px solid #1e293b; }
 .dp-settings-actions button, .dp-settings-page-state button, .dp-settings-session button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px; padding: 8px 11px; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; }
 .dp-settings-actions button.primary { border: 1px solid #2563eb; background: #1d4ed8; color: #fff; }
+.dp-settings-actions button:not(.primary) { border: 1px solid #334155; background: #172033; color: #bfdbfe; }
 .dp-settings-actions button.primary:hover:not(:disabled) { background: #2563eb; }
 .dp-settings-actions button:disabled { cursor: wait; opacity: .65; }
 .dp-settings-feedback { display: flex; align-items: center; gap: 7px; margin-top: 14px; border: 1px solid; border-radius: 8px; padding: 9px 10px; font-size: 10px; line-height: 1.4; }
@@ -42,6 +44,16 @@
 .dp-settings-mode-list strong { color: #e2e8f0; font-size: 11px; }
 .dp-settings-mode-list small { color: #64748b; font-size: 9px; }
 .dp-settings-panel > .dp-settings-actions, .dp-settings-panel > .dp-settings-feedback { margin-right: 19px; margin-left: 19px; }
+.dp-settings-option-list { display: grid; padding: 8px 19px 0; }
+.dp-settings-option-list label { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #1e293b; padding: 13px 0; color: #cbd5e1; }
+.dp-settings-option-list label:last-child { border-bottom: 0; }
+.dp-settings-option-list span, .dp-settings-option-list strong, .dp-settings-option-list small { display: block; }
+.dp-settings-option-list strong { font-size: 11px; }
+.dp-settings-option-list small { margin-top: 4px; color: #64748b; font-size: 9px; font-weight: 400; }
+.dp-settings-option-list input[type='checkbox'] { width: 17px; height: 17px; accent-color: #2563eb; }
+.dp-settings-option-list select { min-width: 130px; border: 1px solid #2b3a50; border-radius: 7px; padding: 7px 9px; background: #0d1422; color: #cbd5e1; }
+.dp-settings-embedded { padding: 17px 19px 0; }
+.dp-settings-profile-warning { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; border: 1px solid #713f12; border-radius: 8px; padding: 9px 11px; background: #251b0c; color: #fcd34d; font-size: 10px; }
 .dp-settings-empty { display: flex; min-height: 200px; flex-direction: column; align-items: center; justify-content: center; padding: 28px 20px; color: #64748b; text-align: center; }
 .dp-settings-empty > svg { margin-bottom: 10px; color: #475569; }
 .dp-settings-empty strong { color: #cbd5e1; font-size: 13px; }

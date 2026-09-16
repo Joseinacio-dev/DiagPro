@@ -9,7 +9,7 @@ function DeviceCard({ estado }) {
       <div className="dp-device-state">
         <Usb size={32} className="dp-device-state-icon waiting" />
         <p className="dp-device-state-title">Aguardando dispositivo</p>
-        <p className="dp-device-state-desc">Conecte um Android via USB com a depuração USB ativada.</p>
+        <p className="dp-device-state-desc">Conecte um dispositivo Android pelo cabo USB.</p>
       </div>
     )
   }
@@ -20,7 +20,7 @@ function DeviceCard({ estado }) {
         <AlertTriangle size={32} className="dp-device-state-icon warning" />
         <p className="dp-device-state-title">Autorização necessária</p>
         <p className="dp-device-state-desc">
-          Desbloqueie o aparelho e aceite a solicitação de depuração USB que apareceu na tela do celular.
+          Desbloqueie o celular e confirme “Permitir depuração USB”. Se disponível, marque “Sempre permitir deste computador”.
         </p>
         <div className="dp-device-state-pulse">
           <Loader2 size={14} className="spin" /> Aguardando autorização...
@@ -34,7 +34,8 @@ function DeviceCard({ estado }) {
       <div className="dp-device-state">
         <WifiOff size={32} className="dp-device-state-icon warning" />
         <p className="dp-device-state-title">Dispositivo offline</p>
-        <p className="dp-device-state-desc">Desconecte e reconecte o cabo USB.</p>
+        <p className="dp-device-state-desc">Reconectando ao dispositivo… Se não reconectar, retire e conecte novamente o cabo USB.</p>
+        <div className="dp-device-state-pulse"><Loader2 size={14} className="spin" /> Tentativa segura em andamento</div>
       </div>
     )
   }
@@ -44,7 +45,26 @@ function DeviceCard({ estado }) {
       <div className="dp-device-state">
         <Layers size={32} className="dp-device-state-icon warning" />
         <p className="dp-device-state-title">Múltiplos dispositivos detectados</p>
-        <p className="dp-device-state-desc">Desconecte os aparelhos extras e deixe apenas um conectado.</p>
+        <p className="dp-device-state-desc">Mais de um dispositivo foi encontrado. Selecione o aparelho que deseja analisar.</p>
+        <div className="dp-device-options" role="list" aria-label="Dispositivos encontrados">
+          {(estado.devices || []).map((device) => (
+            <button key={device.serial} type="button" role="listitem" onClick={() => estado.selectDevice?.(device.serial)}>
+              <Smartphone size={16} />
+              <span><strong>{device.model || 'Modelo não disponível'}</strong><small>{device.serial}</small></span>
+              <em>{device.status}</em>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'adb_unavailable') {
+    return (
+      <div className="dp-device-state">
+        <AlertTriangle size={32} className="dp-device-state-icon error" />
+        <p className="dp-device-state-title">ADB indisponível</p>
+        <p className="dp-device-state-desc">ADB não está disponível no DiagPro.</p>
       </div>
     )
   }
@@ -54,7 +74,7 @@ function DeviceCard({ estado }) {
       <div className="dp-device-state">
         <AlertTriangle size={32} className="dp-device-state-icon error" />
         <p className="dp-device-state-title">Erro na detecção</p>
-        <p className="dp-device-state-desc">{estado.message}</p>
+        <p className="dp-device-state-desc">Não foi possível verificar a conexão neste momento.</p>
       </div>
     )
   }
@@ -77,6 +97,7 @@ function DeviceCard({ estado }) {
 
       <div className="dp-device-info">
         <h2>{estado.manufacturer} {nomeExibicao}</h2>
+        <p className="dp-device-ready">Dispositivo conectado e pronto para análise.</p>
 
         <div className="dp-device-tags">
           <span><Smartphone size={14} /> Android {estado.androidVersion}</span>

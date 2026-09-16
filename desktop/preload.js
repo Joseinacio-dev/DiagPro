@@ -25,10 +25,15 @@ function getInstalledApps({ serial } = {}) {
 }
 
 contextBridge.exposeInMainWorld('diagpro', {
-  reportClientEvent: (payload) => ipcRenderer.invoke('client-event', { event: payload?.event }),
+  reportClientEvent: (payload) => ipcRenderer.invoke('client-event', { event: payload?.event, code: payload?.code }),
   startGoogleAuth: ({ apiBaseUrl }) => ipcRenderer.invoke('google-auth-start', { apiBaseUrl }),
   cancelGoogleAuth: () => ipcRenderer.invoke('google-auth-cancel'),
   getDeviceStatus: () => ipcRenderer.invoke('get-device-status'),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  getStartupSettings: () => ipcRenderer.invoke('get-startup-settings'),
+  setStartupSettings: ({ enabled } = {}) => ipcRenderer.invoke('set-startup-settings', { enabled: enabled === true }),
+  exportSupportDiagnostic: (payload) => ipcRenderer.invoke('export-support-diagnostic', payload),
+  selectDevice: (serial) => ipcRenderer.invoke('select-device', { serial }),
   checkAdb: () => ipcRenderer.invoke('check-adb'),
   onDeviceStatus: (callback) => assinar('device-status-changed', callback),
   runDiagnostic: (serial) => ipcRenderer.invoke('run-diagnostic', { serial }),
@@ -37,6 +42,8 @@ contextBridge.exposeInMainWorld('diagpro', {
   cancelScan: (scanId) => ipcRenderer.invoke('cancel-scan', { scanId }),
   onScanProgress: (callback) => assinar('scan-progress', callback),
   onRemediationProgress: (callback) => assinar('remediation-progress', callback),
+  inspectQuickAction: ({ serial, action, operationId } = {}) => ipcRenderer.invoke('inspect-quick-action', { serial, action, operationId }),
+  cancelQuickAction: ({ serial, operationId } = {}) => ipcRenderer.invoke('cancel-quick-action', { serial, operationId }),
   getInstalledApps,
   getRemovalPreview: ({ serial, packageName, finding, action, projectionId }) => ipcRenderer.invoke(
     'get-removal-preview',

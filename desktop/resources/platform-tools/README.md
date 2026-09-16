@@ -1,16 +1,19 @@
-# ADB para distribuição
+# ADB distribuído com o DiagPro
 
-Nenhum binário é incluído nesta etapa. A redistribuição do ZIP do SDK Google não
-deve ser presumida permitida: revisar os termos da versão escolhida e todas as
-licenças/NOTICE das dependências. Alternativa: build AOSP reproduzível com auditoria
-das licenças de cada componente. Isso exige aprovação antes da inclusão.
+Este diretório contém o subconjunto mínimo do Android SDK Platform Tools para
+Windows usado pelo DiagPro beta. A origem é o pacote oficial do Google, versão
+37.0.1 (`Pkg.Revision=37.0.1`):
 
-Estrutura futura: resources/platform-tools/adb.exe e DLLs exigidas pela versão
-aprovada, acompanhados de LICENSE/NOTICE, origem, versão e hashes SHA-256.
-Depois da aprovação, configurar extraResources para copiar apenas esses arquivos
-para resources/platform-tools no aplicativo instalado (fora do ASAR).
+https://developer.android.com/tools/releases/platform-tools
 
-Hoje o resolvedor reconhece esse caminho futuro, depois tenta SDK/PATH existentes.
-DIAGPRO_ADB_PATH e ADB_PATH são overrides administrativos locais. Nenhum download
-acontece no primeiro uso e o instalador ainda não fornece ADB automaticamente.
-Drivers USB de alguns fabricantes podem ser necessários separadamente.
+Arquivos distribuídos: `adb.exe`, `AdbWinApi.dll`, `AdbWinUsbApi.dll`,
+`NOTICE.txt`, `source.properties` e `MANIFEST.json`.
+
+`fastboot` e as demais ferramentas do pacote não são incluídos. Os hashes do
+conteúdo aprovado estão registrados no manifesto. O instalador copia esses
+arquivos para `resources/platform-tools`, fora do ASAR, e o DiagPro prioriza
+esse executável sobre instalações externas.
+
+Drivers USB específicos do fabricante podem continuar sendo necessários no
+Windows. A redistribuição comercial deve manter o `NOTICE.txt` e passar por
+revisão jurídica dos termos do Android SDK antes da venda.

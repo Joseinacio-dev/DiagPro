@@ -1,0 +1,17 @@
+.support-diagnostic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid #243145; border-radius: 10px; background: #243145; }
+.support-diagnostic-grid > div { min-width: 0; padding: 12px; background: #0d1422; }
+.support-diagnostic-grid span, .support-diagnostic-grid strong { display: block; }
+.support-diagnostic-grid span { color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: .35px; text-transform: uppercase; }
+.support-diagnostic-grid strong { margin-top: 5px; overflow-wrap: anywhere; color: #dbeafe; font-size: 11px; }
+.support-diagnostic-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+.support-diagnostic-actions button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #334155; border-radius: 8px; padding: 8px 11px; background: #172033; color: #bfdbfe; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; }
+.support-diagnostic-actions button:hover:not(:disabled), .support-diagnostic-actions button:focus-visible { outline: none; border-color: #3b82f6; color: #fff; }
+.support-diagnostic-actions button.primary { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
+.support-diagnostic-actions button:disabled { cursor: wait; opacity: .65; }
+.support-diagnostic-feedback { display: flex; align-items: center; gap: 6px; margin: 11px 0 0; border-radius: 7px; padding: 8px 9px; font-size: 9px; }
+.support-diagnostic-feedback.success { background: #08261f; color: #6ee7b7; }
+.support-diagnostic-feedback.error { background: #2b1117; color: #fca5a5; }
+.support-diagnostic-privacy { margin: 10px 0 0; color: #64748b; font-size: 9px; line-height: 1.45; }
+.support-diagnostic.compact .support-diagnostic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 800px) { .support-diagnostic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .support-diagnostic-grid, .support-diagnostic.compact .support-diagnostic-grid { grid-template-columns: 1fr; } }

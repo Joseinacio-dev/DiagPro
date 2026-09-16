@@ -5,6 +5,28 @@ const { validPackageName } = require('../security/parsers/packageParsers')
 
 const ACTION_TYPE = 'uninstall_user_app'
 const DEFAULT_TOKEN_TTL_MS = 2 * 60 * 1000
+const CRITICAL_PACKAGES = new Set([
+  'android',
+  'com.android.permissioncontroller',
+  'com.android.packageinstaller',
+  'com.android.settings',
+  'com.android.systemui',
+  'com.android.launcher3',
+  'com.google.android.apps.nexuslauncher',
+  'com.google.android.packageinstaller',
+  'com.google.android.permissioncontroller',
+  'com.google.android.gms',
+  'com.google.android.gsf',
+  'com.miui.core',
+  'com.miui.guardprovider',
+  'com.miui.home',
+  'com.miui.packageinstaller',
+  'com.miui.powerkeeper',
+  'com.miui.securitycenter',
+  'com.xiaomi.account',
+  'com.xiaomi.finddevice',
+  'com.xiaomi.xmsf',
+])
 
 function remediationError(code, message, context = null) {
   const error = createAdbError(code, message)
@@ -78,8 +100,11 @@ function createRemediationService({
   async function inspectEligibility({ serial, packageName, signal = null, expectedAndroidUserId = null } = {}) {
     if (!isValidSerial(serial)) throw remediationError('INVALID_DEVICE', 'O serial informado é inválido.')
     if (!validPackageName(packageName)) throw remediationError('INVALID_PACKAGE', 'O packageName informado é inválido.')
+    if (CRITICAL_PACKAGES.has(packageName)) {
+      throw remediationError('CRITICAL_APP_BLOCKED', 'Este pacote crítico do Android não pode ser removido pelo DiagPro.')
+    }
     await validateDevice(serial, { signal })
-    const apps = await listInstalledApps(serial, { signal })
+    const apps = await listInstalledApps(serial, { signal, currentUserOnly: true })
     const androidUserId = apps?.currentUserId
     if (!validAndroidUserId(androidUserId)) {
       throw remediationError('ANDROID_USER_UNAVAILABLE', 'Não foi possível identificar com segurança o usuário Android atual.')
@@ -102,6 +127,9 @@ function createRemediationService({
       throw remediationError('PACKAGE_NOT_INSTALLED', 'O pacote não está instalado como aplicativo de usuário para o usuário Android atual.')
     }
     const admins = await collectDeviceAdmins(serial, { signal })
+    if (admins?.status !== 'available' || !Array.isArray(admins.value)) {
+      throw remediationError('ADMIN_STATE_UNAVAILABLE', 'Não foi possível verificar a administração do dispositivo. Remoção indisponível; revise no Android.')
+    }
     const activeAdmin = adminForPackage(admins, packageName, androidUserId)
     if (activeAdmin) {
       throw remediationError(
@@ -260,7 +288,7 @@ function createRemediationService({
         ['-s', serial, 'shell', 'pm', 'uninstall', '--user', String(record.androidUserId), packageName],
         { timeout: 20000, signal },
       )
-      if (!/^success$/im.test(output)) {
+      if (String(output).trim() !== 'Success') {
         throw remediationError('UNINSTALL_FAILED', output || 'O Android não confirmou a desinstalação.', context)
       }
       return {
@@ -282,7 +310,7 @@ function createRemediationService({
     }
     try {
       await validateDevice(serial, { signal })
-      const apps = await listInstalledApps(serial, { signal })
+      const apps = await listInstalledApps(serial, { signal, currentUserOnly: true })
       if (apps?.currentUserId !== androidUserId) {
         return { status: 'not_verified', installed: null, source: 'package_manager', user: androidUserId, reason: 'ANDROID_USER_CHANGED' }
       }
@@ -290,7 +318,16 @@ function createRemediationService({
         ['-s', serial, 'shell', 'pm', 'list', 'packages', '--user', String(androidUserId), packageName],
         { timeout: 20000, signal },
       )
+      const lines = String(output).split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+      if (lines.some(line => !line.startsWith('package:') || !validPackageName(line.slice(8)))) {
+        throw remediationError('INVALID_VERIFICATION_OUTPUT', 'O Android não retornou uma verificação válida.')
+      }
       const installed = packageListed(output, packageName)
+      const listedInSnapshot = Array.isArray(apps?.items) && apps.items.some(app => app.packageName === packageName)
+      if (!Array.isArray(apps?.items) || listedInSnapshot !== installed) {
+        throw remediationError('INCONSISTENT_VERIFICATION', 'As consultas de aplicativos divergiram. Atualize a lista antes de concluir.')
+      }
+      await validateDevice(serial, { signal })
       return { status: 'verified', installed, source: 'package_manager', user: androidUserId }
     } catch (error) {
       return {
@@ -321,6 +358,7 @@ function createRemediationService({
 
 module.exports = {
   ACTION_TYPE,
+  CRITICAL_PACKAGES,
   DEFAULT_TOKEN_TTL_MS,
   adminForPackage,
   createRemediationService,

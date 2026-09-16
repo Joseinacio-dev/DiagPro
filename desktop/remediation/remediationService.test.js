@@ -75,6 +75,14 @@ test('system app é bloqueado sem oferecer uninstall', async () => {
   await assert.rejects(service.createRemovalPreview(previewInput), (error) => error.code === 'SYSTEM_APP_BLOCKED')
 })
 
+test('pacote crítico é bloqueado mesmo se a origem o classificar incorretamente como usuário', async () => {
+  const { service } = fixture({ apps: [{ packageName: 'com.android.settings', type: 'user' }] })
+  await assert.rejects(
+    service.createRemovalPreview({ serial: 'SERIAL-1', packageName: 'com.android.settings' }),
+    (error) => error.code === 'CRITICAL_APP_BLOCKED',
+  )
+})
+
 test('package inválido é rejeitado antes do ADB', async () => {
   const { service } = fixture()
   await assert.rejects(

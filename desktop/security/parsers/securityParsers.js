@@ -57,7 +57,7 @@ function parseDeviceAdmins(output = '') {
   if (/unknown command|not supported|can't find service/i.test(text)) {
     return { status: 'not_supported', value: [], reason: 'COMMAND_NOT_SUPPORTED' }
   }
-  if (/permission denial|security exception/i.test(text)) {
+  if (/permission denial|permission denied|security\s*exception|exception occurred/i.test(text)) {
     return { status: 'not_available', value: [], reason: 'ADB_PERMISSION_DENIED' }
   }
   const admins = []
@@ -74,6 +74,9 @@ function parseDeviceAdmins(output = '') {
       componentName: `${componentMatch[1]}/${componentMatch[2]}`,
     })
   })
+  if (admins.length === 0 && !/Current Device Policy Manager state:|Enabled Device Admins \(User \d+, provisioningState:/i.test(text)) {
+    return { status: 'not_available', value: [], reason: 'UNRECOGNIZED_OUTPUT' }
+  }
   return { status: 'available', value: admins, reason: null }
 }
 

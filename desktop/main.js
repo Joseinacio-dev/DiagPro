@@ -1,21 +1,29 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron')
 const crypto = require('crypto')
+const fs = require('fs')
 const path = require('path')
 const { ADB_ERROR_CODES } = require('./adb/adbErrors')
 const { createScanCoordinator } = require('./adb/scanCoordinator')
+const { createConnectionAssistant, pollDelayForState } = require('./adb/connectionAssistant')
+const { configureSingleInstance, createShutdownManager, registerFatalErrorHandlers } = require('./appLifecycle')
+const { createMaintenanceService } = require('./adb/maintenanceService')
+const maintenanceService = createMaintenanceService()
 const { isTrustedRendererUrl } = require('./electronPolicy')
 const { isMercadoPagoCheckoutUrl } = require('./payments/checkout')
 const { createProductionLogger } = require('./productionLogger')
 const { rendererTarget } = require('./rendererTarget')
 const { runGoogleDesktopAuth } = require('./googleAuth')
+const { buildSupportDiagnostic } = require('./supportDiagnostic')
 const {
   verificarEstado,
   cancelarRemediacao,
   coletarDiagnostico,
   desinstalarAppUsuario,
   executarScan,
+  iniciarServidorAdb,
   listarAppsInstalados,
   obterPreviewRemocao,
+  reconectarDispositivo,
   verificarAdb,
 } = require('./deviceDetector')
 
@@ -23,14 +31,47 @@ let mainWindow
 let estadoAtual = { status: 'waiting' }
 let ultimoEstadoJSON = null
 let verificacaoAtual = null
+let selectedDeviceSerial = null
+let devicePollingTimer = null
 let rendererTargetInfo = null
 let productionLogger = null
 const scanCoordinator = createScanCoordinator()
+const connectionAssistant = createConnectionAssistant()
 const forceLocalBuild = process.argv.includes('--local-build')
 let googleAuthController = null
+const lifecycleController = new AbortController()
+
+const shutdownManager = createShutdownManager({
+  coordinator: scanCoordinator,
+  getGoogleController: () => googleAuthController,
+  getMonitorController: () => lifecycleController,
+  clearPolling: () => {
+    if (devicePollingTimer) clearTimeout(devicePollingTimer)
+    devicePollingTimer = null
+  },
+})
+
+const primaryInstance = configureSingleInstance({ app, getWindow: () => mainWindow })
+
+registerFatalErrorHandlers(process, {
+  log: (event, details) => logOperationalError(event, details),
+  notify: () => {
+    if (app.isReady()) dialog.showErrorBox('Erro inesperado', 'O DiagPro encontrou um erro inesperado. Reinicie o aplicativo.')
+  },
+})
 
 function logOperationalError(event, details = {}) {
   productionLogger?.error(event, details)
+}
+
+function readRecentSafeLogs(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8').split(/\r?\n/).filter(Boolean).slice(-30).map((line) => {
+      try { return JSON.parse(line) } catch { return null }
+    }).filter(Boolean)
+  } catch {
+    return []
+  }
 }
 
 function trustedIpcHandler(channel, handler) {
@@ -53,8 +94,8 @@ function validScanId(scanId) {
   return typeof scanId === 'string' && /^[A-Za-z0-9-]{8,80}$/.test(scanId)
 }
 
-function acquireDeviceOperation(serial, type, id) {
-  return scanCoordinator.beginOperation(serial, type, id)
+function acquireDeviceOperation(serial, type, id, options = {}) {
+  return scanCoordinator.beginOperation(serial, type, id, options)
 }
 
 function releaseDeviceOperation(serial, id) {
@@ -84,8 +125,10 @@ function createWindow() {
     devServerUrl: process.env.DIAGPRO_RENDERER_URL,
   })
   const iconDirectory = rendererTargetInfo.kind === 'file' ? 'dist' : 'public'
+  if (rendererTargetInfo.kind === 'file') Menu.setApplicationMenu(null)
 
   mainWindow = new BrowserWindow({
+    title: 'DiagPro',
     width: 1440,
     height: 900,
     minWidth: 1100,
@@ -147,16 +190,34 @@ function createWindow() {
 async function monitorarDispositivo() {
   if (verificacaoAtual) return verificacaoAtual
 
-  verificacaoAtual = verificarEstado()
-    .then((estado) => {
+  verificacaoAtual = verificarEstado({ selectedSerial: selectedDeviceSerial, signal: lifecycleController.signal })
+    .then(async (estado) => {
+      if (estado.status === 'multiple' && selectedDeviceSerial
+        && !estado.devices?.some((device) => device.serial === selectedDeviceSerial)) {
+        selectedDeviceSerial = null
+      }
+      connectionAssistant.observe(estado)
       estadoAtual = estado
       abortDisconnectedOperations(estado)
       const estadoJSON = JSON.stringify(estado)
 
       if (estadoJSON !== ultimoEstadoJSON) {
         ultimoEstadoJSON = estadoJSON
+        productionLogger?.info('adb_state_changed', { state: estado.connectionState || estado.status })
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('device-status-changed', estado)
+        }
+      }
+
+      const reconnect = estado.serial && !scanCoordinator.getOperation(estado.serial)
+        ? connectionAssistant.nextReconnect(estado)
+        : null
+      if (reconnect) {
+        try {
+          await reconectarDispositivo(reconnect.serial, { signal: lifecycleController.signal })
+          productionLogger?.info('adb_reconnect_requested', { attempt: reconnect.attempt })
+        } catch (error) {
+          logOperationalError('adb_reconnect_failed', { code: error?.codigo || error?.code || 'ADB_RECONNECT_FAILED' })
         }
       }
 
@@ -171,10 +232,81 @@ async function monitorarDispositivo() {
 
 trustedIpcHandler('get-device-status', () => monitorarDispositivo())
 
+trustedIpcHandler('get-app-info', () => ({
+  name: app.getName(),
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  operatingSystem: {
+    platform: process.platform,
+    architecture: process.arch,
+    version: process.getSystemVersion(),
+    label: process.platform === 'win32' ? `Windows ${process.getSystemVersion()}` : process.platform,
+  },
+}))
+
+trustedIpcHandler('get-startup-settings', () => {
+  const supported = process.platform === 'win32' && app.isPackaged
+  return { supported, enabled: supported ? app.getLoginItemSettings().openAtLogin === true : false }
+})
+
+trustedIpcHandler('set-startup-settings', (_event, { enabled } = {}) => {
+  const supported = process.platform === 'win32' && app.isPackaged
+  if (!supported || typeof enabled !== 'boolean') return { supported, enabled: false }
+  app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath })
+  return { supported: true, enabled: app.getLoginItemSettings().openAtLogin === true }
+})
+
+trustedIpcHandler('export-support-diagnostic', async (_event, payload = {}) => {
+  const diagnostic = buildSupportDiagnostic({
+    payload,
+    runtime: {
+      generatedAt: new Date().toISOString(),
+      version: app.getVersion(),
+      packaged: app.isPackaged,
+      platform: process.platform,
+      osVersion: process.getSystemVersion(),
+      architecture: process.arch,
+    },
+    logs: readRecentSafeLogs(productionLogger?.filePath),
+  })
+  const date = new Date().toISOString().slice(0, 10)
+  const selection = await dialog.showSaveDialog(mainWindow, {
+    title: 'Exportar diagnóstico técnico do DiagPro',
+    defaultPath: path.join(app.getPath('documents'), `diagpro-diagnostico-tecnico-${date}.json`),
+    filters: [{ name: 'Diagnóstico técnico JSON', extensions: ['json'] }],
+  })
+  if (selection.canceled || !selection.filePath) return { ok: false, code: 'CANCELED' }
+  try {
+    await fs.promises.writeFile(selection.filePath, `${JSON.stringify(diagnostic, null, 2)}\n`, { encoding: 'utf8', flag: 'w' })
+    productionLogger?.info('support_diagnostic_exported', { type: 'sanitized' })
+    return { ok: true }
+  } catch {
+    logOperationalError('support_diagnostic_export_failed', { code: 'WRITE_FAILED' })
+    return { ok: false, code: 'WRITE_FAILED' }
+  }
+})
+
+trustedIpcHandler('select-device', async (_event, { serial } = {}) => {
+  try {
+    selectedDeviceSerial = connectionAssistant.validateSelection(serial, estadoAtual.devices || [])
+    ultimoEstadoJSON = null
+    if (verificacaoAtual) await verificacaoAtual.catch(() => {})
+    return { ok: true, data: await monitorarDispositivo() }
+  } catch (error) {
+    return { ok: false, code: error.code || 'INVALID_DEVICE', message: error.message }
+  }
+})
+
 trustedIpcHandler('create-scan-id', () => crypto.randomUUID())
 
 trustedIpcHandler('client-event', (_event, payload = {}) => {
   if (payload?.event === 'api_unavailable') logOperationalError('api_unavailable', { code: 'NETWORK_ERROR' })
+  if (payload?.event === 'diagnostic_persistence_failed') {
+    const code = /^(?:HTTP_(?:400|401|403|409|413|429|500|502|503)|NETWORK_ERROR)$/.test(payload?.code)
+      ? payload.code
+      : 'UNKNOWN_ERROR'
+    logOperationalError('diagnostic_persistence_failed', { code })
+  }
 })
 
 trustedIpcHandler('google-auth-start', async (_event, { apiBaseUrl } = {}) => {
@@ -215,7 +347,10 @@ trustedIpcHandler('google-auth-cancel', () => {
 
 trustedIpcHandler('check-adb', async () => {
   try {
-    const [adb, device] = await Promise.all([verificarAdb(), monitorarDispositivo()])
+    const [adb, device] = await Promise.all([
+      verificarAdb({ signal: lifecycleController.signal }),
+      monitorarDispositivo(),
+    ])
     return { ok: true, data: { adb, device } }
   } catch (err) {
     const messages = {
@@ -232,9 +367,10 @@ trustedIpcHandler('check-adb', async () => {
 
 trustedIpcHandler('run-diagnostic', async (_event, { serial } = {}) => {
   const operationId = crypto.randomUUID()
-  if (!acquireDeviceOperation(serial, 'scan', operationId)) return { sucesso: false, mensagem: deviceBusyResponse(serial).message }
+  const controller = new AbortController()
+  if (!acquireDeviceOperation(serial, 'scan', operationId, { controller })) return { sucesso: false, mensagem: deviceBusyResponse(serial).message }
   try {
-    const dados = await coletarDiagnostico(serial)
+    const dados = await coletarDiagnostico(serial, { signal: controller.signal })
     return { sucesso: true, dados }
   } catch (err) {
     return { sucesso: false, mensagem: 'Não foi possível coletar o diagnóstico. Verifique a conexão do dispositivo.' }
@@ -253,6 +389,7 @@ trustedIpcHandler('start-scan', async (_event, { serial, mode, modules, scanId: 
       : { ...deviceBusyResponse(serial), scanId }
   }
   try {
+    productionLogger?.info('scan_started', { mode, moduleCount: Array.isArray(modules) ? modules.length : 0 })
     const dados = await executarScan(serial, {
       mode,
       modules,
@@ -264,6 +401,17 @@ trustedIpcHandler('start-scan', async (_event, { serial, mode, modules, scanId: 
         }
       },
     })
+    for (const root of dados.files?.rootDiagnostics || []) {
+      productionLogger?.info('file_root_checked', {
+        root: root.path,
+        state: root.enumerationStatus || root.status,
+        errorType: root.errorType,
+        exitCode: root.exitCode,
+        durationMs: root.durationMs,
+        found: root.found,
+      })
+    }
+    productionLogger?.info('scan_finished', { state: dados.status, mode })
     return { ok: true, scanId, status: dados.status, data: dados }
   } catch (err) {
     return {
@@ -285,11 +433,63 @@ trustedIpcHandler('cancel-scan', async (_event, { scanId } = {}) => {
   return { ok: true, scanId, status: 'cancel_requested' }
 })
 
+trustedIpcHandler('inspect-quick-action', async (_event, { serial, action, operationId } = {}) => {
+  if (!validScanId(operationId)) {
+    return { ok: false, code: 'INVALID_OPERATION', message: 'A identificação da consulta é inválida.' }
+  }
+  const controller = new AbortController()
+  if (!scanCoordinator.beginOperation(serial, 'maintenance', operationId, { controller })) return deviceBusyResponse(serial)
+  const startedAt = Date.now()
+  const loggedAction = ['cleanup', 'optimization', 'battery', 'backup'].includes(action) ? action : 'invalid'
+  productionLogger?.info('quick_action_started', { action: loggedAction })
+  try {
+    const data = await maintenanceService.inspect({ serial, action, signal: controller.signal })
+    productionLogger?.info('quick_action_finished', {
+      action: loggedAction,
+      state: data.coverage,
+      durationMs: Date.now() - startedAt,
+    })
+    return { ok: true, operationId, data }
+  } catch (error) {
+    productionLogger?.error('quick_action_failed', {
+      action: loggedAction,
+      code: error.code || 'MAINTENANCE_FAILED',
+      errorType: error.constructor?.name || 'Error',
+      durationMs: Date.now() - startedAt,
+    })
+    return { ok: false, code: error.code || 'MAINTENANCE_FAILED', message: error.message || 'Não foi possível consultar o dispositivo.' }
+  } finally {
+    releaseDeviceOperation(serial, operationId)
+  }
+})
+
+trustedIpcHandler('cancel-quick-action', async (_event, { serial, operationId } = {}) => {
+  if (!validScanId(operationId)) {
+    return { ok: false, code: 'INVALID_OPERATION', message: 'A identificação da consulta é inválida.' }
+  }
+  const operation = scanCoordinator.getOperationById(operationId)
+  if (!operation || operation.type !== 'maintenance' || operation.serial !== serial) {
+    return { ok: false, code: 'OPERATION_NOT_FOUND', message: 'A consulta não está mais em execução.' }
+  }
+  scanCoordinator.cancelOperation(operationId)
+  return { ok: true, operationId, status: 'cancel_requested' }
+})
+
 trustedIpcHandler('get-installed-apps', async (_event, { serial } = {}) => {
   const operationId = crypto.randomUUID()
-  if (!acquireDeviceOperation(serial, 'apps', operationId)) return deviceBusyResponse(serial)
+  const controller = new AbortController()
+  if (!acquireDeviceOperation(serial, 'apps', operationId, { controller })) return deviceBusyResponse(serial)
   try {
-    return { ok: true, data: await listarAppsInstalados(serial) }
+    return {
+      ok: true,
+      data: await listarAppsInstalados(serial, {
+        signal: controller.signal,
+        currentUserOnly: true,
+        includeExtendedStates: true,
+        includeSecurityDetails: true,
+        detailTypes: ['user', 'system'],
+      }),
+    }
   } catch (err) {
     return { ok: false, code: err.codigo || 'APPS_UNAVAILABLE', message: err.message }
   } finally {
@@ -301,11 +501,12 @@ trustedIpcHandler('get-removal-preview', async (_event, {
   serial, packageName, finding, action, projectionId,
 } = {}) => {
   const operationId = crypto.randomUUID()
-  if (!acquireDeviceOperation(serial, 'removal_preview', operationId)) return deviceBusyResponse(serial)
+  const controller = new AbortController()
+  if (!acquireDeviceOperation(serial, 'removal_preview', operationId, { controller })) return deviceBusyResponse(serial)
   try {
     return {
       ok: true,
-      ...await obterPreviewRemocao({ serial, packageName, finding, action, projectionId }),
+      ...await obterPreviewRemocao({ serial, packageName, finding, action, projectionId, signal: controller.signal }),
     }
   } catch (err) {
     return { ok: false, code: err.codigo || 'REMOVAL_PREVIEW_FAILED', message: err.message }
@@ -369,18 +570,33 @@ trustedIpcHandler('open-external-checkout', async (_event, { url } = {}) => {
   }
 })
 
-app.whenReady().then(() => {
+if (primaryInstance) app.whenReady().then(async () => {
   try {
     productionLogger = createProductionLogger({ directory: path.join(app.getPath('userData'), 'logs') })
     productionLogger.info('startup', { packaged: app.isPackaged, version: app.getVersion() })
   } catch { /* A falha de logs não impede a inicialização. */ }
   createWindow()
-  const poll = () => monitorarDispositivo().catch(() => logOperationalError('adb_unavailable', { code: 'ADB_UNAVAILABLE' }))
-  poll()
-  setInterval(poll, 2000)
+  try {
+    await iniciarServidorAdb({ signal: lifecycleController.signal })
+  } catch (error) {
+    logOperationalError('adb_start_server_failed', { code: error?.codigo || error?.code || 'ADB_UNAVAILABLE' })
+  }
+  const poll = async () => {
+    try {
+      await monitorarDispositivo()
+    } catch {
+      logOperationalError('adb_unavailable', { code: 'ADB_UNAVAILABLE' })
+    } finally {
+      if (!shutdownManager.isShuttingDown()) devicePollingTimer = setTimeout(poll, pollDelayForState(estadoAtual))
+    }
+  }
+  void poll()
 })
 
+app.on('before-quit', () => shutdownManager.shutdown())
+
 app.on('window-all-closed', () => {
+  shutdownManager.shutdown()
   if (process.platform !== 'darwin') {
     app.quit()
   }

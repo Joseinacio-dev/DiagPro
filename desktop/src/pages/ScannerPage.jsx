@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, AppWindow, BatteryCharging, CheckCircle2, ChevronRight,
-  Cpu, CreditCard, HardDrive, Loader2, MemoryStick, Play, Settings2, ShieldCheck,
+  Cpu, CreditCard, FileSearch, HardDrive, Layers3, Loader2, MemoryStick, Play, Settings2, ShieldCheck,
   SlidersHorizontal, Smartphone, Trash2, RotateCcw, Wrench, X,
 } from 'lucide-react'
 import DeviceCard from '../components/DeviceCard.jsx'
@@ -25,6 +25,10 @@ const MODULOS = [
   { id: 'battery', label: 'Bateria', icon: BatteryCharging },
   { id: 'storage', label: 'Armazenamento', icon: HardDrive },
   { id: 'performance', label: 'Desempenho', icon: Cpu },
+  { id: 'files', label: 'Arquivos acessíveis', icon: FileSearch },
+  { id: 'persistence', label: 'Persistência/configurações', icon: Layers3 },
+  { id: 'userApps', label: 'Somente apps do usuário', icon: AppWindow },
+  { id: 'systemApps', label: 'Somente apps de sistema', icon: AppWindow },
 ]
 
 const MODULOS_INICIAIS = ['system', 'apps', 'security', 'battery', 'storage']
@@ -34,7 +38,9 @@ const NOMES_ETAPAS = {
   system: 'Sistema',
   apps: 'Aplicativos',
   permissions: 'Permissões',
+  files: 'Arquivos',
   security: 'Segurança',
+  persistence: 'Persistência',
   battery: 'Bateria',
   storage: 'Armazenamento',
   performance: 'Desempenho',
@@ -44,7 +50,11 @@ const NOMES_ETAPAS = {
 const STATUS_ETAPAS = {
   running: 'Analisando...',
   completed: 'Concluído',
+  partial: 'Parcial',
   unavailable: 'Indisponível',
+  failed: 'Falhou',
+  canceled: 'Cancelado',
+  device_disconnected: 'Dispositivo desconectado',
   waiting: 'Aguardando',
 }
 
@@ -114,6 +124,26 @@ function valor(valorRecebido, sufixo = '') {
   return valorRecebido === null || valorRecebido === undefined ? 'Não disponível' : `${valorRecebido}${sufixo}`
 }
 
+function resumoArquivos(files) {
+  if (!files) return { value: 'Não executado', note: 'Somente no Completo ou Personalizado' }
+  if (files.status === 'failed') {
+    return { value: 'Varredura falhou', note: 'Nenhum resultado zero foi presumido.' }
+  }
+  if (files.status === 'not_available') {
+    return { value: 'Indisponível', note: 'O armazenamento compartilhado não pôde ser enumerado.' }
+  }
+  if (files.status === 'partial') {
+    return { value: 'Varredura parcial', note: `${files.analyzed ?? 0} arquivo(s) enumerado(s); há limitações registradas.` }
+  }
+  if (files.zeroConfirmed === true) {
+    return { value: '0 arquivos', note: 'Zero confirmado nas raízes compartilhadas acessíveis.' }
+  }
+  return {
+    value: `${files.analyzed ?? 0}/${files.found ?? 0}`,
+    note: `${files.attention?.length ?? 0} item(ns) para atenção por extensão`,
+  }
+}
+
 function formatarEvidencia(evidence) {
   if (Array.isArray(evidence)) return evidence.map((item) => {
     const dado = item?.value
@@ -140,7 +170,14 @@ function resumirHash(hash) {
 function etapasDoResultado(result) {
   return Object.entries(result?.stages || {}).reduce((etapas, [id, etapa]) => {
     if (!STATUS_ETAPAS[etapa?.status]) return etapas
-    return [...etapas, { id, label: NOMES_ETAPAS[id] || id, status: etapa.status }]
+    return [...etapas, {
+      id,
+      label: NOMES_ETAPAS[id] || id,
+      status: etapa.status,
+      message: etapa.error?.message || null,
+      durationMs: etapa.durationMs,
+      counts: etapa.counts || null,
+    }]
   }, [])
 }
 
@@ -181,6 +218,7 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
   const remediationActions = Array.isArray(resultado?.security?.remediationActions)
     ? resultado.security.remediationActions
     : []
+  const resumoColetaArquivos = resumoArquivos(resultado?.files)
 
   const verificarLicenca = useCallback(async () => {
     setLicenca({ status: 'checking', capability: null, message: '' })
@@ -227,6 +265,8 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
           label: NOMES_ETAPAS[evento.stage] || evento.label || evento.stage,
           status: evento.status,
           index: evento.index,
+          message: evento.message || null,
+          counters: evento.counters || null,
         }
 
         if (indiceExistente === -1) return [...atuais, etapaAtualizada]
@@ -682,7 +722,14 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
         return finais.reduce((acumuladas, [id, etapa]) => {
           if (!STATUS_ETAPAS[etapa.status]) return acumuladas
           const indiceExistente = acumuladas.findIndex((item) => item.id === id)
-          const etapaFinal = { id, label: NOMES_ETAPAS[id] || id, status: etapa.status }
+          const etapaFinal = {
+            id,
+            label: NOMES_ETAPAS[id] || id,
+            status: etapa.status,
+            message: etapa.error?.message || null,
+            durationMs: etapa.durationMs,
+            counts: etapa.counts || null,
+          }
           if (indiceExistente === -1) return [...acumuladas, etapaFinal]
           return acumuladas.map((item, index) => (index === indiceExistente ? { ...item, ...etapaFinal } : item))
         }, atuais)
@@ -719,9 +766,14 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
         }))
       }).catch((error) => {
         if (persistenciaDiagnosticoRef.current !== bindingPersistencia) return
-        setPersistencia({ status: 'error', id: null })
+        const httpStatus = Number.isInteger(error?.status) ? error.status : null
+        setPersistencia({ status: 'error', id: null, httpStatus })
+        window.diagpro?.reportClientEvent?.({
+          event: 'diagnostic_persistence_failed',
+          code: httpStatus ? `HTTP_${httpStatus}` : 'NETWORK_ERROR',
+        })?.catch(() => {})
         onScanSessionChange?.((current) => updateMatchingScanSession(current, scanAtual.id, {
-          persistence: { status: 'error', id: null },
+          persistence: { status: 'error', id: null, httpStatus },
         }))
         if (error?.status === 403 && error?.details?.code) {
           setLicenca({
@@ -843,6 +895,7 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
           {progresso && (
             <div className="scanner-progress">
               <div className="scanner-progress-copy"><span>{progresso.label}</span><strong>{progresso.progress ?? 0}%</strong></div>
+              {progresso.counters && <small className="scanner-progress-counters">Arquivos: {progresso.counters.analyzed}/{progresso.counters.found}</small>}
               <div className="scanner-progress-track"><span style={{ width: `${progresso.progress ?? 0}%` }} /></div>
             </div>
           )}
@@ -855,9 +908,10 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
                 <div className={`scanner-stage-${etapa.status}`} key={etapa.id}>
                   {etapa.status === 'completed' && <CheckCircle2 size={16} />}
                   {etapa.status === 'running' && <Loader2 size={16} className="spin" />}
-                  {etapa.status === 'unavailable' && <AlertTriangle size={16} />}
+                  {['partial', 'unavailable', 'failed', 'canceled', 'device_disconnected'].includes(etapa.status) && <AlertTriangle size={16} />}
                   {etapa.status === 'waiting' && <span className="scanner-stage-waiting" aria-hidden="true" />}
-                  <span>{etapa.label}</span><small>{STATUS_ETAPAS[etapa.status]}</small>
+                  <span className="scanner-stage-copy"><span>{etapa.label}</span>{etapa.message && <em>{etapa.message}</em>}</span>
+                  <small>{STATUS_ETAPAS[etapa.status]}{Number.isFinite(etapa.durationMs) ? ` · ${etapa.durationMs} ms` : ''}</small>
                 </div>
               ))}
             </div>
@@ -872,9 +926,20 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
             <div><HardDrive size={22} /><span>Armazenamento</span><strong>{valor(resultado.storage?.usedGb, ' GB')} usados</strong><small>{valor(resultado.storage?.freeGb, ' GB')} livres</small></div>
             <div><MemoryStick size={22} /><span>Memória RAM</span><strong>{valor(resultado.memory?.availableGb, ' GB')} disponíveis</strong><small>Total: {valor(resultado.memory?.totalGb, ' GB')}</small></div>
             <div><AppWindow size={22} /><span>Aplicativos</span><strong>{valor(resultado.apps?.total)}</strong><small>{resultado.apps ? `${resultado.apps.userTotal} do usuário e ${resultado.apps.systemTotal} do sistema` : 'Módulo não executado'}</small></div>
+            <div><FileSearch size={22} /><span>Arquivos acessíveis</span><strong>{resumoColetaArquivos.value}</strong><small>{resumoColetaArquivos.note}</small></div>
+            <div><Layers3 size={22} /><span>Módulos processados</span><strong>{resultado.technicalCoverage ? `${resultado.technicalCoverage.modulesProcessedPercent ?? 0}%` : 'Não calculado'}</strong><small>{resultado.technicalCoverage ? `${resultado.technicalCoverage.modulesProcessed ?? 0}/${resultado.technicalCoverage.modulesRequested} finalizados · Cobertura do dispositivo: ${resultado.technicalCoverage.status === 'limited' ? 'Limitada' : 'Completa'}` : 'Sem dados'}</small></div>
             <div><ShieldCheck size={22} /><span>Saúde do sistema</span><strong>{resultado.health?.available ? `${resultado.health.score}% — ${resultado.health.label}` : 'Não calculada'}</strong><small>{resultado.health?.explanation || 'Dados insuficientes'}</small></div>
             <div><AlertTriangle size={22} /><span>Risco de Segurança</span><strong>{Number.isFinite(securityRisk?.score) ? `${securityRisk.score}/100 — ${securityRisk.label}` : STATUS_RISCO_SEGURANCA[securityRisk?.status] || 'Não calculado'}</strong><small>{securityRisk?.explanation || 'O scan não produziu cobertura suficiente para calcular o risco técnico.'}</small></div>
           </div>
+          {resultado.technicalCoverage && (
+            <details className="scanner-security-risk-details">
+              <summary>Ver cobertura e limitações técnicas</summary>
+              <p><strong>Cobertura do dispositivo: {resultado.technicalCoverage.status === 'limited' ? 'Limitada' : 'Completa'}.</strong> Não é atribuído percentual ao conteúdo inacessível.</p>
+              <p>{resultado.technicalCoverage.explanation}</p>
+              {resultado.files?.rootDiagnostics?.length > 0 && <ul>{resultado.files.rootDiagnostics.map((root) => <li key={root.path}><code>{root.path}</code>: acessível {root.accessible ? 'SIM' : 'NÃO'}{Number.isFinite(root.found) ? ` · ${root.found} arquivo(s) encontrado(s)` : ''}{root.enumerationStatus ? ` · ${root.enumerationStatus}` : ''}</li>)}</ul>}
+              <ul>{resultado.technicalCoverage.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}</ul>
+            </details>
+          )}
           {securityRisk && (
             <details className="scanner-security-risk-details">
               <summary>Ver detalhes do Risco de Segurança</summary>
@@ -1013,7 +1078,7 @@ function ScannerPage({ accessToken, onNavigate, dispositivo, initialMode, scanSe
           <p className="scanner-disclaimer">Os resultados refletem apenas os sinais técnicos acessíveis via ADB. O DiagPro não afirma ausência de malware sem evidências verificáveis.</p>
           {persistencia.status === 'saving' && <p className="scanner-persistence saving">Salvando no histórico...</p>}
           {persistencia.status === 'saved' && <p className="scanner-persistence saved">Diagnóstico salvo no histórico. ID: {persistencia.id}</p>}
-          {persistencia.status === 'error' && <p className="scanner-persistence error">O diagnóstico foi concluído, mas não pôde ser salvo no histórico.</p>}
+          {persistencia.status === 'error' && <p className="scanner-persistence error">Diagnóstico concluído localmente; histórico online não salvo.{persistencia.httpStatus ? ` HTTP ${persistencia.httpStatus}.` : ''}</p>}
         </section>
       )}
       {remediationModal && (

@@ -34,3 +34,21 @@ test('logger grava evento estruturado sem conteúdo sensível', () => {
     fs.rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test('logger aceita estado técnico mas rejeita credenciais em qualquer evento', () => {
+  assert.deepEqual(sanitizeDetails({
+    state: 'ADB_UNAVAILABLE', mode: 'complete', moduleCount: 9,
+    password: 'SECRET', accessToken: 'SECRET', refreshToken: 'SECRET', databaseUrl: 'SECRET',
+  }), { state: 'ADB_UNAVAILABLE', mode: 'complete', moduleCount: 9 })
+})
+
+test('logger de arquivos registra apenas diagnóstico agregado da raiz', () => {
+  assert.deepEqual(sanitizeDetails({
+    root: '/storage/emulated/0', state: 'partial', errorType: 'COMMAND_NOT_SUPPORTED',
+    exitCode: 1, durationMs: 245, found: 17,
+    fileName: 'foto-pessoal.jpg', path: '/storage/emulated/0/DCIM/foto-pessoal.jpg',
+  }), {
+    root: '/storage/emulated/0', state: 'partial', errorType: 'COMMAND_NOT_SUPPORTED',
+    exitCode: 1, durationMs: 245, found: 17,
+  })
+})

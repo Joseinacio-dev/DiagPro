@@ -7,14 +7,15 @@ import {
 } from 'lucide-react'
 import DeviceCard from '../components/DeviceCard.jsx'
 import AnalysisCenter from '../components/AnalysisCenter.jsx'
+import QuickActionPanel from '../components/QuickActionPanel.jsx'
 import './DashboardPage.css'
 
 const quickActions = [
-  { icon: Sparkles, label: 'Limpeza\nProfunda', tone: 'blue', available: false },
-  { icon: Rocket, label: 'Otimização\nde Sistema', tone: 'green', available: false },
-  { icon: BatteryCharging, label: 'Verificação\nde Bateria', tone: 'yellow', target: 'scanner' },
-  { icon: AppWindow, label: 'Gerenciar\nApps', tone: 'purple', target: 'devices' },
-  { icon: DatabaseBackup, label: 'Backup de\nDados', tone: 'cyan', available: false },
+  { icon: Sparkles, label: 'Limpeza Profunda', state: 'DIAGNÓSTICO APENAS', tone: 'blue', action: 'cleanup' },
+  { icon: Rocket, label: 'Otimização do Sistema', state: 'DIAGNÓSTICO APENAS', tone: 'green', action: 'optimization' },
+  { icon: BatteryCharging, label: 'Verificação de Bateria', state: 'FUNCIONAL', tone: 'yellow', action: 'battery' },
+  { icon: AppWindow, label: 'Gerenciar Apps', state: 'FUNCIONAL', tone: 'purple', target: 'devices' },
+  { icon: DatabaseBackup, label: 'Backup de Dados', state: 'INDISPONÍVEL', tone: 'cyan', action: 'backup' },
 ]
 
 // Mapeia as 9 etapas reais do executarScan para as 5 etapas visuais do AnalysisCenter
@@ -56,6 +57,7 @@ function dashboardScanState(session) {
 }
 
 function DashboardPage({ dispositivo, scanSession, onOpenScanner, onNavigate }) {
+  const [quickAction, setQuickAction] = useState(null)
   const [analysisType, setAnalysisType] = useState('Rápida')
   const scan = dashboardScanState(scanSession)
   const resultado = scanSession?.result || null
@@ -155,7 +157,7 @@ function DashboardPage({ dispositivo, scanSession, onOpenScanner, onNavigate }) 
 
         <div className="dashboard-column dashboard-center">
           <section className="dashboard-panel scanner-panel"><div className="panel-heading"><h2>Scanner Inteligente</h2><span className="recommended-badge">Recomendado</span></div><div className="scanner-radar"><div className="radar-ring ring-one" /><div className="radar-ring ring-two" /><div className="radar-ring ring-three" /><div className="radar-cross" /><div className="scanner-shield"><Shield size={58} /><Search size={27} /></div></div><span className="analysis-label">Tipos de análise</span><div className="analysis-options">{['Rápida', 'Completa', 'Personalizada'].map((type) => <button key={type} className={analysisType === type ? 'selected' : ''} onClick={() => setAnalysisType(type)}>{type}</button>)}</div><button className="start-scan-button" onClick={iniciarScan} disabled={dispositivo.status !== 'connected' || scan?.status === 'running'}><Play size={17} fill="currentColor" /> {scan?.status === 'running' ? 'Analisando...' : 'Abrir Scanner'}</button><span className="last-scan">{lastScanLabel}</span></section>
-          <section className="dashboard-panel quick-panel"><div className="panel-heading"><h2>Ações Rápidas</h2></div><div className="quick-actions">{quickActions.map(({ icon: Icon, label, tone, available, target }) => <button className="quick-action" key={label} disabled={available === false} title={available === false ? 'Recurso ainda não disponível nesta versão.' : undefined} onClick={() => { if (target === 'scanner') onOpenScanner?.('quick'); if (target === 'devices') onNavigate?.('Dispositivos') }}><Icon size={30} className={`tone-${tone}`} /><span>{label.split('\n').map((line) => <span key={line}>{line}</span>)}</span></button>)}</div></section>
+          <section className="dashboard-panel quick-panel"><div className="panel-heading"><h2>Ações Rápidas</h2></div><div className="quick-actions">{quickActions.map(({ icon: Icon, label, state, tone, action, target }) => <button className="quick-action" key={label} disabled={dispositivo.status !== 'connected' || scan?.status === 'running'} title={dispositivo.status !== 'connected' ? 'Conecte e autorize um Android.' : action === 'cleanup' ? 'Consultar preview de armazenamento e cache; exclusão indisponível.' : action === 'backup' ? 'Avaliar capacidade; criação de backup indisponível.' : undefined} onClick={() => { if (target === 'devices') onNavigate?.('Dispositivos'); else setQuickAction(action) }}><Icon size={30} className={`tone-${tone}`} /><span className="quick-action-copy"><strong>{label}</strong><small className={`quick-action-state state-${tone}`}>{state}</small></span></button>)}</div></section>
         </div>
 
         <div className="dashboard-column dashboard-right">
@@ -176,6 +178,8 @@ function DashboardPage({ dispositivo, scanSession, onOpenScanner, onNavigate }) 
           <section className="dashboard-panel system-panel"><div className="panel-heading"><h2>Resumo do Sistema</h2></div><div className="system-list">{systemSummary.map(({ icon: Icon, label, value, tone }) => <div className="system-row" key={label}><span><Icon size={15} />{label}</span><strong className={tone}>{value}</strong></div>)}</div></section>
         </div>
       </main>
+
+      {quickAction && <QuickActionPanel key={`${quickAction}:${dispositivo.serial}:${dispositivo.status}`} action={quickAction} device={dispositivo} onClose={() => setQuickAction(null)} onManageApps={() => { setQuickAction(null); onNavigate?.('Dispositivos') }} />}
 
       <AnalysisCenter
         deviceStatus={dispositivo.status === 'connected' ? 'connected' : 'disconnected'}

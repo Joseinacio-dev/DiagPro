@@ -2,12 +2,20 @@ const fs = require('fs')
 const path = require('path')
 
 const SAFE_DETAIL_KEYS = new Set([
+  'action',
   'code',
   'exitCode',
+  'mode',
+  'moduleCount',
+  'root',
+  'errorType',
+  'durationMs',
+  'found',
   'packaged',
   'reason',
   'targetKind',
   'type',
+  'state',
   'version',
 ])
 

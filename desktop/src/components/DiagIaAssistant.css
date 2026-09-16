@@ -1,0 +1,74 @@
+.diag-ia-layer { position: fixed; inset: 0; z-index: 80; pointer-events: none; }
+.diag-ia-layer.is-expanded { background: rgba(2, 7, 18, .58); backdrop-filter: blur(4px); pointer-events: auto; }
+.diag-ia-bubble { position: fixed; width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid rgba(56, 189, 248, .75); border-radius: 50%; padding: 0; background: radial-gradient(circle at 32% 24%, #1e6bb8 0, #0b3b74 44%, #071d3a 100%); box-shadow: 0 8px 24px rgba(2, 132, 199, .28), inset 0 0 16px rgba(56, 189, 248, .12); color: #d9f7ff; cursor: grab; pointer-events: auto; touch-action: none; transition: box-shadow .18s ease, transform .18s ease; }
+.diag-ia-bubble:hover, .diag-ia-bubble:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(14, 165, 233, .22), 0 10px 28px rgba(2, 132, 199, .42), inset 0 0 18px rgba(56, 189, 248, .18); transform: translateY(-1px); }
+.diag-ia-bubble:active { cursor: grabbing; transform: scale(.97); }
+.diag-ia-layer.is-expanded .diag-ia-bubble { opacity: 0; pointer-events: none; }
+.diag-ia-pulse { position: absolute; inset: 5px; border: 1px solid rgba(125, 211, 252, .2); border-radius: inherit; }
+.diag-ia-glyph { overflow: visible; filter: drop-shadow(0 0 4px rgba(103, 232, 249, .55)); }
+.diag-ia-glyph path, .diag-ia-glyph circle { stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
+.diag-ia-glyph circle { fill: #67e8f9; stroke-width: 0; }
+.diag-ia-panel { position: fixed; width: min(420px, calc(100vw - 24px)); max-height: min(600px, calc(100vh - 60px)); overflow: hidden; border: 1px solid rgba(49, 105, 145, .75); border-radius: 16px; background: linear-gradient(150deg, rgba(14, 27, 44, .98), rgba(7, 17, 31, .98)); box-shadow: 0 24px 70px rgba(0, 0, 0, .55), 0 0 34px rgba(14, 165, 233, .1); pointer-events: auto; animation: diag-panel-in .18s ease-out; }
+.diag-ia-panel.expanded { inset: 5vh 7vw !important; width: auto; max-height: none; border-radius: 20px; }
+.diag-ia-panel > header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(48, 75, 103, .72); padding: 12px 14px; background: linear-gradient(120deg, rgba(13, 51, 84, .9), rgba(13, 27, 45, .9) 62%); }
+.diag-ia-panel-mark { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid #266a99; border-radius: 10px; background: rgba(11, 49, 86, .85); color: #a5f3fc; }
+.diag-ia-panel > header div { min-width: 0; flex: 1; }
+.diag-ia-panel > header strong, .diag-ia-panel > header small { display: block; }
+.diag-ia-panel > header strong { color: #f8fafc; font-size: 15px; }
+.diag-ia-panel > header small { margin-top: 2px; color: #7dd3fc; font-size: 10px; }
+.diag-ia-panel > header button { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: #94a3b8; cursor: pointer; }
+.diag-ia-panel > header button:hover, .diag-ia-panel > header button:focus-visible { outline: 2px solid #0ea5e9; background: #17283c; color: #fff; }
+.diag-ia-panel-body { max-height: min(535px, calc(100vh - 125px)); overflow-y: auto; padding: 13px; scrollbar-color: #285174 #0a1321; }
+.diag-ia-panel.expanded .diag-ia-panel-body { max-height: calc(90vh - 60px); padding: 18px clamp(18px, 5vw, 70px); }
+.diag-ia-conversation { display: flex; flex-direction: column; gap: 9px; min-height: 118px; max-height: 210px; overflow-y: auto; padding: 2px 3px 6px; scrollbar-width: thin; }
+.diag-ia-panel.expanded .diag-ia-conversation { min-height: 260px; max-height: 42vh; }
+.diag-ia-message { max-width: 88%; border: 1px solid #23415b; border-radius: 13px 13px 13px 4px; padding: 9px 11px; background: rgba(9, 33, 51, .88); align-self: flex-start; }
+.diag-ia-message.user { align-self: flex-end; border-color: #175e91; border-radius: 13px 13px 4px 13px; background: linear-gradient(145deg, #0c5b91, #0b4773); }
+.diag-ia-message span { color: #67e8f9; font-size: 7px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+.diag-ia-message.user span { color: #bae6fd; }
+.diag-ia-message p { margin: 4px 0 0; color: #d1dbe7; font-size: 10px; line-height: 1.55; white-space: pre-line; }
+.diag-ia-message.user p { color: #fff; }
+.diag-ia-message.thinking { opacity: .75; }
+.diag-ia-message.thinking p { animation: diag-thinking 1.2s ease-in-out infinite; }
+.diag-ia-privacy { margin: 8px 2px 2px; border: 1px solid #31506c; border-radius: 9px; padding: 9px; background: #0a2032; }
+.diag-ia-privacy p { margin: 0; color: #9cb3c9; font-size: 8px; line-height: 1.5; }
+.diag-ia-privacy div { display: flex; justify-content: flex-end; gap: 6px; margin-top: 7px; }
+.diag-ia-privacy button { border: 1px solid #28516e; border-radius: 7px; padding: 5px 7px; background: #11283a; color: #bae6fd; cursor: pointer; font-size: 8px; }
+.diag-ia-escalate { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 2px; border: 1px solid #2583b9; border-radius: 8px; padding: 7px 9px; background: #0d3955; color: #d8f5ff; cursor: pointer; font-size: 9px; }
+.diag-ia-question { margin-top: 10px; }
+.diag-ia-question > label { display: block; margin: 0 2px 6px; color: #93c5fd; font-size: 9px; font-weight: 700; }
+.diag-ia-question > div { display: flex; align-items: stretch; gap: 7px; }
+.diag-ia-question textarea { min-height: 54px; flex: 1; resize: vertical; border: 1px solid #28435e; border-radius: 11px; padding: 10px 11px; background: rgba(5, 16, 29, .9); color: #e2e8f0; font: inherit; font-size: 10px; line-height: 1.4; }
+.diag-ia-question textarea:focus { outline: 2px solid rgba(14, 165, 233, .35); border-color: #0ea5e9; }
+.diag-ia-question button { width: 44px; border: 1px solid #147fb7; border-radius: 11px; background: linear-gradient(160deg, #0a8bd6, #07558e); color: #fff; cursor: pointer; box-shadow: 0 5px 15px rgba(2, 132, 199, .2); }
+.diag-ia-question button:disabled { cursor: not-allowed; opacity: .4; }
+.diag-ia-suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 11px; }
+.diag-ia-suggestions button { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #20344a; border-radius: 9px; padding: 8px 9px; background: rgba(17, 30, 46, .9); color: #bfdbfe; cursor: pointer; font: inherit; font-size: 9px; text-align: left; }
+.diag-ia-suggestions button:hover, .diag-ia-suggestions button:focus-visible { outline: none; border-color: #0ea5e9; background: #0d2a43; color: #e0f2fe; }
+.diag-ia-context { margin-top: 10px; border: 1px solid #22384e; border-radius: 10px; background: rgba(8, 20, 34, .7); }
+.diag-ia-context summary { padding: 9px 11px; color: #8eb4d3; cursor: pointer; font-size: 9px; font-weight: 700; }
+.diag-ia-context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border-top: 1px solid #22364c; background: #22364c; }
+.diag-ia-context-grid div { min-width: 0; padding: 8px 10px; background: #0a1321; }
+.diag-ia-context-grid span, .diag-ia-context-grid strong { display: block; }
+.diag-ia-context-grid span { color: #60748e; font-size: 7px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+.diag-ia-context-grid strong { margin-top: 4px; overflow: hidden; color: #cbd5e1; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.diag-ia-human { width: 100%; display: flex; align-items: center; gap: 9px; margin-top: 10px; border: 1px solid #2a4260; border-radius: 10px; padding: 9px 11px; background: #111c2d; color: #bae6fd; cursor: pointer; text-align: left; }
+.diag-ia-human span, .diag-ia-human strong, .diag-ia-human small { display: block; }
+.diag-ia-human strong { font-size: 10px; }
+.diag-ia-human small { margin-top: 2px; color: #7186a0; font-size: 8px; }
+.diag-ia-ticket { margin-top: 10px; border: 1px solid #2d5573; border-radius: 10px; padding: 10px; background: #091928; }
+.diag-ia-ticket > header { display: flex; align-items: center; justify-content: space-between; color: #e0f2fe; font-size: 10px; }
+.diag-ia-ticket > header button { display: grid; place-items: center; border: 0; background: transparent; color: #94a3b8; cursor: pointer; }
+.diag-ia-ticket > p { margin: 7px 0; color: #8396ad; font-size: 8px; line-height: 1.45; }
+.diag-ia-ticket dl { margin: 0; }
+.diag-ia-ticket dl div { border-top: 1px solid #1d3245; padding: 6px 0; }
+.diag-ia-ticket dt { color: #5f7894; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.diag-ia-ticket dd { margin: 2px 0 0; color: #cbd5e1; font-size: 9px; overflow-wrap: anywhere; }
+.diag-ia-ticket-actions { display: flex; gap: 6px; margin-top: 7px; }
+.diag-ia-ticket-actions button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #245779; border-radius: 7px; padding: 6px 8px; background: #0d2a40; color: #bae6fd; cursor: pointer; font-size: 8px; }
+.diag-ia-feedback { display: block; margin-top: 7px; color: #67e8f9; font-size: 8px; }
+.diag-ia-limit { margin: 10px 2px 0; color: #64748b; font-size: 8px; line-height: 1.45; }
+@keyframes diag-panel-in { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes diag-thinking { 50% { opacity: .45; } }
+@media (max-width: 700px) { .diag-ia-panel.expanded { inset: 10px !important; } .diag-ia-suggestions { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .diag-ia-panel, .diag-ia-bubble { animation: none; transition: none; } }

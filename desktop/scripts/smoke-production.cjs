@@ -36,6 +36,10 @@ app.whenReady().then(async () => {
     phase = 'ipc'
     const connection = await window.webContents.executeJavaScript('window.diagpro.getDeviceStatus()')
     assert.equal(typeof connection.status, 'string')
+    phase = 'maintenance-ipc'
+    const maintenance = await window.webContents.executeJavaScript("window.diagpro.inspectQuickAction({ serial: 'INVALID;', action: 'cleanup', operationId: 'smoke-maintenance' })")
+    assert.equal(maintenance.ok, false)
+    assert.equal(maintenance.code, 'INVALID_DEVICE')
     phase = 'devtools'
     window.webContents.openDevTools()
     await new Promise(resolve => setTimeout(resolve, 200))

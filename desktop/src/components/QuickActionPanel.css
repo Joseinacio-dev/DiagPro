@@ -1,0 +1,18 @@
+.dp-quick-overlay { position: fixed; inset: 0; z-index: 1000; background: #030913cc; display: grid; place-items: center; padding: 24px; }
+.dp-quick-dialog { width: min(760px, 100%); max-height: 90vh; overflow: auto; background: #101c2c; color: #dce9f6; border: 1px solid #3b526c; border-radius: 16px; padding: 24px; box-shadow: 0 24px 80px #0009; }
+.dp-quick-dialog header, .dp-quick-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dp-quick-dialog h2 { font-size: 20px; margin: 0; }
+.dp-quick-dialog header > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dp-quick-state { border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 800; letter-spacing: .04em; background: #1e3a55; color: #9bd0ff; }
+.dp-quick-state.state-battery { background: #123c2c; color: #75e6ad; }
+.dp-quick-state.state-backup { background: #3b2b18; color: #ffd17b; }
+.dp-quick-dialog h3 { font-size: 15px; margin: 0 0 10px; }
+.dp-quick-dialog p, .dp-quick-dialog li { font-size: 13px; line-height: 1.6; color: #b9cbe0; }
+.dp-quick-dialog li + li { margin-top: 8px; }
+.dp-quick-reading { border: 1px solid #34465b; border-radius: 8px; padding: 14px; margin: 12px 0; }
+.dp-quick-reading dl { margin: 0; }
+.dp-quick-reading dl > div { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 6px 0; font-size: 13px; }
+.dp-quick-reading dd { margin: 0; overflow-wrap: anywhere; }
+.dp-quick-dialog button { background: #203957; color: #e3efff; border: 1px solid #4d6b90; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+.dp-quick-dialog button:disabled { opacity: .55; cursor: not-allowed; }
+.dp-quick-dialog button:focus-visible { outline: 2px solid #8ecaff; outline-offset: 3px; }

@@ -604,7 +604,10 @@ class DiagnosticoSerializer(serializers.ModelSerializer):
         return value
 
     def validate_modulos(self, value):
-        permitidos = {'system', 'apps', 'security', 'permissions', 'battery', 'storage', 'performance'}
+        permitidos = {
+            'system', 'apps', 'security', 'permissions', 'battery', 'storage', 'performance',
+            'files', 'persistence', 'userApps', 'systemApps',
+        }
         if not isinstance(value, list) or not value:
             raise serializers.ValidationError('Informe ao menos um módulo executado.')
         if any(not isinstance(item, str) or item not in permitidos for item in value):

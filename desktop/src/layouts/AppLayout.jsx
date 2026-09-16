@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, ScanLine, Smartphone, ShieldAlert, Users, FileText,
-  BarChart3, Settings, CreditCard, Search, Bell, ChevronDown, HelpCircle
+  BarChart3, Settings, CreditCard, Search, Bell, ChevronDown, HelpCircle, LifeBuoy
 } from 'lucide-react'
+import DiagIaAssistant from '../components/DiagIaAssistant.jsx'
 import './AppLayout.css'
 
 const menuGroups = [
@@ -27,11 +28,13 @@ const menuGroups = [
     items: [
       { icon: Settings, label: 'Configurações' },
       { icon: CreditCard, label: 'Plano e assinatura' },
+      { icon: LifeBuoy, label: 'Suporte' },
     ],
   },
 ]
 
-function AppLayout({ username, onLogout, activePage, onNavigate, children }) {
+function AppLayout({ username, onLogout, activePage, onNavigate, startupStatus, device, scanSession, diagIaOpen, onDiagIaOpenChange, children }) {
+  const apiOnline = startupStatus?.api?.status === 'online'
   return (
     <div className="dp-layout">
       <aside className="dp-sidebar">
@@ -96,12 +99,12 @@ function AppLayout({ username, onLogout, activePage, onNavigate, children }) {
         </div>
 
         <footer className="dp-footer">
-          <span>🟢 Servidor: Online</span>
-          <span>🟢 API: Conectada</span>
-          <span>Versão: 2.1.0</span>
+          <span>{apiOnline ? '🟢' : '🟡'} API: {apiOnline ? 'Conectada' : startupStatus?.api?.status === 'checking' ? 'Conectando…' : 'Indisponível'}</span>
+          <span>Versão: {startupStatus?.appInfo?.version || '--'}</span>
           <span>© 2026 DiagPro. Todos os direitos reservados.</span>
         </footer>
       </div>
+      <DiagIaAssistant device={device} scanSession={scanSession} startupStatus={startupStatus} profile="Conta autenticada" open={diagIaOpen} onOpenChange={onDiagIaOpenChange} />
     </div>
   )
 }

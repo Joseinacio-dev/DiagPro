@@ -21,10 +21,33 @@ import {
   X,
 } from 'lucide-react'
 import { listarDiagnosticos } from '../services/diagnostics.js'
+import DeviceCard from '../components/DeviceCard.jsx'
 import './DevicesPage.css'
 
 const EMPTY_VALUE = 'Não disponível'
 const MODE_LABELS = { quick: 'Rápida', complete: 'Completa', custom: 'Personalizada' }
+const CRITICAL_APP_PACKAGES = new Set([
+  'android',
+  'com.android.permissioncontroller',
+  'com.android.packageinstaller',
+  'com.android.settings',
+  'com.android.systemui',
+  'com.android.launcher3',
+  'com.google.android.apps.nexuslauncher',
+  'com.google.android.packageinstaller',
+  'com.google.android.permissioncontroller',
+  'com.google.android.gms',
+  'com.google.android.gsf',
+  'com.miui.core',
+  'com.miui.guardprovider',
+  'com.miui.home',
+  'com.miui.packageinstaller',
+  'com.miui.powerkeeper',
+  'com.miui.securitycenter',
+  'com.xiaomi.account',
+  'com.xiaomi.finddevice',
+  'com.xiaomi.xmsf',
+])
 const REMEDIATION_STATUS = {
   remediation_pending: 'Correção pendente', resolved: 'Resolvido',
   verification_failed: 'Verificação falhou', failed: 'Falha',
@@ -94,6 +117,7 @@ function normaliseApp(app, index) {
   const analysisStatus = rawAnalysisStatus === 'not_analyzed'
     ? 'Não analisado'
     : readableValue(rawAnalysisStatus, 'Não analisado')
+  const details = source.securityDetails?.available ? source.securityDetails : null
 
   return {
     key: packageName || `${name}-${index}`,
@@ -101,6 +125,14 @@ function normaliseApp(app, index) {
     packageName,
     type,
     analysisStatus,
+    versionName: details?.versionName ?? null,
+    versionCode: details?.versionCode ?? null,
+    enabled: source.enabled ?? details?.enabled ?? null,
+    suspended: source.suspended ?? null,
+    installerPackageName: details?.installerPackageName ?? null,
+    requestedPermissions: Array.isArray(details?.requestedPermissions) ? details.requestedPermissions : null,
+    detailsAvailable: Boolean(details),
+    canRemove: type.kind === 'user' && Boolean(packageName) && !CRITICAL_APP_PACKAGES.has(packageName),
   }
 }
 
@@ -169,8 +201,14 @@ function getDeviceState(status) {
     case 'multiple':
       return {
         title: 'Múltiplos dispositivos detectados',
-        detail: 'Deixe apenas um aparelho conectado para consultar os aplicativos.',
+        detail: 'Mais de um dispositivo foi encontrado. Selecione o aparelho que deseja analisar.',
         tone: 'warning',
+      }
+    case 'adb_unavailable':
+      return {
+        title: 'ADB indisponível',
+        detail: 'ADB não está disponível no DiagPro.',
+        tone: 'danger',
       }
     case 'error':
       return {
@@ -374,7 +412,7 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
   }, [isConnected])
 
   const openRemovalConfirmation = useCallback(async (app) => {
-    if (!isConnected || !serial || !app?.packageName || app.type?.kind !== 'user') {
+    if (!isConnected || !serial || !app?.packageName || app.type?.kind !== 'user' || app.canRemove !== true) {
       setFeedback({ type: 'error', message: 'Somente aplicativos de usuário podem ser removidos.' })
       return
     }
@@ -456,6 +494,7 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
   const confirmRemoval = useCallback(async () => {
     if (
       !removalModal
+      || !isConnected
       || !serial
       || removalModal.serial !== serial
       || !removalModal.token
@@ -477,13 +516,14 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
       }
 
       const result = await api.uninstallUserApp(args)
-      if (result?.ok === true) {
+      if (!currentDeviceRef.current.isConnected || currentDeviceRef.current.serial !== serial) return
+      setRemovalModal(null)
+      setReloadToken((current) => current + 1)
+      if (result?.ok === true && result.verification?.status === 'verified' && result.verification.installed === false) {
         setFeedback({
           type: 'success',
           message: result.message || result.mensagem || 'Aplicativo removido com sucesso.',
         })
-        setRemovalModal(null)
-        setReloadToken((current) => current + 1)
       } else {
         setFeedback({
           type: 'error',
@@ -491,14 +531,17 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
         })
       }
     } catch {
+      if (!currentDeviceRef.current.isConnected || currentDeviceRef.current.serial !== serial) return
+      setRemovalModal(null)
+      setReloadToken((current) => current + 1)
       setFeedback({
         type: 'error',
-        message: 'A remoção falhou. Verifique a conexão ADB e tente novamente.',
+        message: 'Não foi possível confirmar a remoção. Atualize a lista e abra um novo preview antes de tentar novamente.',
       })
     } finally {
       setRemoving(false)
     }
-  }, [removalModal, serial])
+  }, [removalModal, serial, isConnected])
 
   const storage = scanData?.storage ?? scanData?.armazenamento
   const memory = scanData?.memory ?? scanData?.memoria
@@ -566,14 +609,7 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
             </div>
           </div>
         ) : (
-          <div className="dp-devices-empty dp-devices-device-empty">
-            <Usb size={30} />
-            <div>
-              <strong>{deviceState.title}</strong>
-              <p>{dispositivo?.mensagem || deviceState.detail}</p>
-              {dispositivo?.serial && <small>Serial detectado: {dispositivo.serial}</small>}
-            </div>
-          </div>
+          <DeviceCard estado={dispositivo} />
         )}
       </section>
 
@@ -779,7 +815,7 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
                           </div>
                           <div className="dp-devices-app-actions">
                             <button className="dp-devices-detail-btn" onClick={() => setDetailApp(app)}>Detalhes</button>
-                            {app.type.kind === 'user' && app.packageName ? (
+                            {app.canRemove ? (
                               <button
                                 className="dp-devices-remove-btn"
                                 onClick={() => openRemovalConfirmation(app)}
@@ -837,7 +873,13 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
               <div><span>packageName</span><strong>{detailApp.packageName || 'Não informado'}</strong></div>
               <div><span>Tipo</span><strong>{detailApp.type.label}</strong></div>
               <div><span>Análise</span><strong>{detailApp.analysisStatus}</strong></div>
-              <div><span>Remoção</span><strong>{detailApp.type.kind === 'user' ? 'Disponível com confirmação' : 'Não permitida'}</strong></div>
+              <div><span>Versão</span><strong>{detailApp.versionName ?? 'Não disponível'}</strong></div>
+              <div><span>Código da versão</span><strong>{detailApp.versionCode ?? 'Não disponível'}</strong></div>
+              <div><span>Estado</span><strong>{detailApp.enabled === null ? 'Não disponível' : detailApp.enabled ? 'Habilitado' : 'Desabilitado'}</strong></div>
+              <div><span>Suspenso</span><strong>{detailApp.suspended === null ? 'Não disponível' : detailApp.suspended ? 'Sim' : 'Não'}</strong></div>
+              <div><span>Instalador</span><strong>{detailApp.installerPackageName ?? 'Não disponível'}</strong></div>
+              <div><span>Permissões solicitadas</span><strong>{detailApp.requestedPermissions === null ? 'Não disponível' : detailApp.requestedPermissions.length}</strong></div>
+              <div><span>Remoção</span><strong>{detailApp.canRemove ? 'Disponível com confirmação' : 'Não permitida'}</strong></div>
             </div>
             <div className="dp-devices-modal-actions">
               <button className="dp-devices-secondary-btn" onClick={() => setDetailApp(null)}>Fechar</button>
@@ -866,20 +908,22 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
             </div>
 
             <div className="dp-devices-modal-app">
-              <strong>{removalModal.app.name}</strong>
+              <strong>{removalModal.app.name || removalModal.app.packageName}</strong>
               <span>{removalModal.app.packageName}</span>
             </div>
 
             <div className="dp-devices-modal-details">
               <div><span>Tipo</span><strong>{removalModal.app.type.label}</strong></div>
+              <div><span>Versão</span><strong>{removalModal.app.versionName ?? 'Não disponível'}</strong></div>
+              <div><span>Ação</span><strong>{removalModal.preview?.preview?.action?.label || 'Desinstalar aplicativo do usuário atual'}</strong></div>
               <div><span>Usuário Android</span><strong>{removalModal.preview?.currentUserId ?? 'Não identificado'}</strong></div>
               {removalModal.preview?.reason && <div><span>Motivo</span><strong>{removalModal.preview.reason}</strong></div>}
               {removalModal.preview?.motivo && !removalModal.preview?.reason && <div><span>Motivo</span><strong>{removalModal.preview.motivo}</strong></div>}
-              {removalModal.preview?.impact && <div><span>Impacto</span><strong>{removalModal.preview.impact}</strong></div>}
+              {removalModal.preview?.preview?.impact && <div><span>Impacto</span><strong>{removalModal.preview.preview.impact}</strong></div>}
             </div>
 
             <p className="dp-devices-modal-warning">
-              O aplicativo poderá deixar de funcionar para o usuário atual do dispositivo. Componentes de sistema não são removidos por esta tela.
+              O aplicativo será desinstalado para o usuário atual. Seus dados e configurações locais podem ser perdidos. Componentes de sistema não são removidos por esta tela.
             </p>
 
             <div className="dp-devices-modal-actions">

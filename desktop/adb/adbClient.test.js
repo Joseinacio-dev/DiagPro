@@ -89,12 +89,23 @@ test('produção localiza primeiro o ADB distribuído nos recursos do aplicativo
   assert.equal(located, bundledAdb)
 })
 
-test('caminho explícito do DiagPro prevalece sobre instalações detectadas', () => {
+test('caminho explícito do DiagPro prevalece quando o ADB empacotado está ausente', () => {
   const configured = path.join('D:', 'Ferramentas', 'adb.exe')
   const located = locateAdb(
     { DIAGPRO_ADB_PATH: configured, ANDROID_HOME: path.join('C:', 'Android') },
-    () => true,
+    (candidate) => candidate === configured || candidate.includes(`${path.sep}Android${path.sep}`),
     path.join('C:', 'Program Files', 'DiagPro', 'resources'),
   )
   assert.equal(located, configured)
+})
+
+test('ADB empacotado prevalece até sobre override externo quando está disponível', () => {
+  const resourcesPath = path.join('C:', 'Program Files', 'DiagPro', 'resources')
+  const bundledAdb = path.join(resourcesPath, 'platform-tools', 'adb.exe')
+  const located = locateAdb(
+    { DIAGPRO_ADB_PATH: path.join('D:', 'Outro', 'adb.exe') },
+    (candidate) => candidate === bundledAdb || candidate.startsWith('D:'),
+    resourcesPath,
+  )
+  assert.equal(located, bundledAdb)
 })

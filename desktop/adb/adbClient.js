@@ -15,10 +15,11 @@ function isValidSerial(serial) {
 }
 
 function locateAdb(env = process.env, existsSync = fs.existsSync, resourcesPath = process.resourcesPath) {
+  const bundledAdb = resourcesPath && path.join(resourcesPath, 'platform-tools', 'adb.exe')
   const candidates = [
+    bundledAdb && existsSync(bundledAdb) ? bundledAdb : null,
     env.DIAGPRO_ADB_PATH,
     env.ADB_PATH,
-    resourcesPath && path.join(resourcesPath, 'platform-tools', 'adb.exe'),
     env.ANDROID_HOME && path.join(env.ANDROID_HOME, 'platform-tools', 'adb.exe'),
     env.ANDROID_SDK_ROOT && path.join(env.ANDROID_SDK_ROOT, 'platform-tools', 'adb.exe'),
     env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, 'Android', 'Sdk', 'platform-tools', 'adb.exe'),

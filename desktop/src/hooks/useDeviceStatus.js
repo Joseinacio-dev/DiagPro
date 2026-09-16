@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 
 function normalizarDispositivo(estado) {
   if (!estado) {
@@ -55,7 +55,21 @@ function useDeviceStatus() {
     }
   }, [])
 
-  return dispositivo
+  const selectDevice = useCallback(async (serial) => {
+    if (!window.diagpro?.selectDevice) return { ok: false, code: 'ADB_UNAVAILABLE' }
+    const response = await window.diagpro.selectDevice(serial)
+    if (response?.ok && response.data) setDispositivo(normalizarDispositivo(response.data))
+    return response
+  }, [])
+
+  const reconnect = useCallback(async () => {
+    if (!window.diagpro?.getDeviceStatus) return { status: 'adb_unavailable' }
+    const response = normalizarDispositivo(await window.diagpro.getDeviceStatus())
+    setDispositivo(response)
+    return response
+  }, [])
+
+  return { ...dispositivo, selectDevice, reconnect }
 }
 
 export default useDeviceStatus

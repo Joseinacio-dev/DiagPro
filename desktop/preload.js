@@ -25,6 +25,9 @@ function getInstalledApps({ serial } = {}) {
 }
 
 contextBridge.exposeInMainWorld('diagpro', {
+  readSavedSession: () => ipcRenderer.invoke('session-read'),
+  saveSession: ({ refresh, username }) => ipcRenderer.invoke('session-save', { refresh, username }),
+  clearSavedSession: () => ipcRenderer.invoke('session-clear'),
   reportClientEvent: (payload) => ipcRenderer.invoke('client-event', { event: payload?.event, code: payload?.code }),
   startGoogleAuth: ({ apiBaseUrl }) => ipcRenderer.invoke('google-auth-start', { apiBaseUrl }),
   cancelGoogleAuth: () => ipcRenderer.invoke('google-auth-cancel'),

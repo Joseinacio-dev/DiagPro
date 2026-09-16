@@ -6,6 +6,8 @@ const path = require('node:path')
 const assert = require('node:assert/strict')
 
 const temporaryProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'diagpro-smoke-'))
+// CI/VMs can have no usable GPU process; this changes only the smoke harness.
+app.disableHardwareAcceleration()
 app.setPath('userData', temporaryProfile)
 process.argv.push('--local-build')
 require('../main.js')

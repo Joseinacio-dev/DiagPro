@@ -4,6 +4,8 @@
   "description": "Diagnóstico técnico Android para assistências",
   "main": "main.js",
   "scripts": {
+    "test:launch": "node --test sessionVault.test.js deviceProviders.test.js src/utils/sessionStore.test.mjs src/utils/requestTimeout.test.mjs",
+    "posttest": "npm run test:launch",
     "test": "node --test quickActions.audit.test.js appLifecycle.test.js packaging.test.js supportDiagnostic.test.js uiContracts.test.js deviceConnectionStates.test.js deviceDetector.integration.test.js adb/connectionAssistant.test.js adb/maintenanceService.test.js adb/scanModes.test.js adb/androidContentSafety.test.js preload.test.js rendererTarget.test.js googleAuth.test.js src/services/diagIa.test.mjs src/services/diagIaPayload.test.mjs src/services/diagnostics.test.mjs src/utils/googleLogin.test.mjs src/utils/tokenStorage.test.mjs src/utils/serviceHealth.test.mjs src/utils/scanSession.test.mjs src/utils/diagIaPosition.test.mjs src/utils/diagIaKnowledge.test.mjs src/utils/supportContext.test.mjs src/utils/supportTicket.test.mjs src/utils/settingsPreferences.test.mjs adb/adbClient.test.js adb/scanCoordinator.test.js security/parsers/parsers.test.js security/collectors/collectors.test.js security/collectors/extendedCollectors.test.js security/securityAnalyzer.test.js security/ruleEngine.test.js security/falsePositive.test.js security/securityCoverage.test.js security/scanCoverage.test.js security/riskScorer.test.js remediation/remediation.test.js remediation/remediationService.test.js payments/checkout.test.js electronPolicy.test.js productionLogger.test.js src/config/apiBase.test.mjs",
     "dev": "vite",
     "electron": "electron .",

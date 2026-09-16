@@ -14,7 +14,7 @@ import ThreatsPage from './pages/ThreatsPage.jsx'
 import PlaceholderPage from './pages/PlaceholderPage.jsx'
 import useDeviceStatus from './hooks/useDeviceStatus.js'
 import useStartupStatus from './hooks/useStartupStatus.js'
-import { salvarTokens, limparTokens, renovarSessao } from './utils/auth.js'
+import { salvarTokens, limparTokens, renovarSessao, restaurarSessaoSalva, getSessionUsername } from './utils/auth.js'
 import { reconcileScanSession, sessionForConnectedDevice } from './utils/scanSession.mjs'
 
 function App() {
@@ -35,23 +35,21 @@ function App() {
 
   useEffect(() => {
     async function restaurarSessao() {
+      await restaurarSessaoSalva()
       const accessToken = await renovarSessao()
       if (accessToken) {
         setToken(accessToken)
-        setUsername(localStorage.getItem('diagpro_username') || '')
+        setUsername(getSessionUsername())
       }
       setVerificandoSessao(false)
     }
     restaurarSessao()
   }, [])
 
-  function handleLoginSuccess(accessToken, refreshToken, user, lembrar) {
+  async function handleLoginSuccess(accessToken, refreshToken, user, lembrar) {
+    await salvarTokens(accessToken, refreshToken, user, lembrar)
     setToken(accessToken)
     setUsername(user)
-    if (lembrar) {
-      salvarTokens(accessToken, refreshToken)
-      localStorage.setItem('diagpro_username', user)
-    }
   }
 
   function handleLogout() {
@@ -62,7 +60,7 @@ function App() {
     setScanSession(null)
     setScannerRequest(null)
     setDiagIaOpen(false)
-    limparTokens()
+    limparTokens().catch(() => {})
   }
 
   function handleNavigate(page) {

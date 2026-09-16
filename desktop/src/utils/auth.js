@@ -1,41 +1,44 @@
 import { apiUrl } from '../config/api.js'
+import { withRequestTimeout } from './requestTimeout.mjs'
 
-import {
-  ACCESS_KEY,
-  clearSession,
-  readAccessToken,
-  readRefreshToken,
-  saveTokens,
-} from './tokenStorage.mjs'
+import { createSessionStore } from './sessionStore.mjs'
+const session = createSessionStore({ storage: localStorage, bridge: window.diagpro })
+let refreshPending = null
 
 export async function fetchApi(url, options = {}) {
   try {
-    const timeoutSignal = AbortSignal.timeout(15000)
-    const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
-    return await fetch(url, { ...options, signal })
+    return await fetch(url, withRequestTimeout(options))
   } catch (error) {
     window.diagpro?.reportClientEvent?.({ event: 'api_unavailable' })?.catch(() => {})
     throw error
   }
 }
 
-export function salvarTokens(access, refresh) {
-  saveTokens(localStorage, access, refresh)
+export function salvarTokens(access, refresh, username = '', remember = true) {
+  return session.save(access, refresh, username, remember)
 }
 
 export function limparTokens() {
-  clearSession(localStorage)
+  return session.clear()
 }
 
 export function getRefreshToken() {
-  return readRefreshToken(localStorage)
+  return session.read().refresh
 }
 
 export function getAccessToken() {
-  return readAccessToken(localStorage)
+  return session.read().access
 }
+export const getSessionUsername = () => session.read().username
+export const restaurarSessaoSalva = () => session.restore()
 
 export async function renovarSessao() {
+  if (refreshPending) return refreshPending
+  refreshPending = refreshSession().finally(() => { refreshPending = null })
+  return refreshPending
+}
+
+async function refreshSession() {
   const refresh = getRefreshToken()
   if (!refresh) return null
 
@@ -47,13 +50,12 @@ export async function renovarSessao() {
     })
 
     if (!resposta.ok) {
-      limparTokens()
+      if ([400, 401].includes(resposta.status) && getRefreshToken() === refresh) await limparTokens()
       return null
     }
 
     const dados = await resposta.json()
-    localStorage.setItem(ACCESS_KEY, dados.access)
-    return dados.access
+    return typeof dados.access === 'string' && session.setAccess(dados.access, refresh) ? dados.access : null
   } catch {
     return null
   }

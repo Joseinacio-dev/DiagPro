@@ -1,4 +1,5 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, safeStorage } = require('electron')
+const { createSessionVault } = require('./sessionVault')
 const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
@@ -231,6 +232,10 @@ async function monitorarDispositivo() {
 }
 
 trustedIpcHandler('get-device-status', () => monitorarDispositivo())
+const sessionVault = () => createSessionVault({ directory: app.getPath('userData'), safeStorage })
+trustedIpcHandler('session-read', () => sessionVault().read())
+trustedIpcHandler('session-save', (_event, payload) => sessionVault().save(payload || {}))
+trustedIpcHandler('session-clear', () => sessionVault().clear())
 
 trustedIpcHandler('get-app-info', () => ({
   name: app.getName(),

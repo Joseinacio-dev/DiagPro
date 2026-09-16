@@ -1,9 +1,10 @@
 import { localDiagIaAnswer } from '../utils/supportContext.mjs'
 import { answerDiagIaQuestion } from '../utils/diagIaKnowledge.mjs'
+import { DIAG_IA_TIMEOUT_MS } from '../utils/requestTimeout.mjs'
 
 // Ponto único para respostas da Diag IA. Quando houver serviço real, o provider
 // será uma chamada autenticada ao backend DiagPro; nunca diretamente a um provedor externo.
-export async function requestDiagIaGuidance({ actionId, question, history = [], context, previousDomain = null, backendProvider = null, timeoutMs = 12000 }) {
+export async function requestDiagIaGuidance({ actionId, question, history = [], context, previousDomain = null, backendProvider = null, timeoutMs = DIAG_IA_TIMEOUT_MS }) {
   if (question && typeof backendProvider === 'function') {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)

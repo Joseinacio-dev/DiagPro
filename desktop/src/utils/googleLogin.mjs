@@ -24,7 +24,7 @@ export async function executeGoogleLogin({ bridge, apiBaseUrl, remember, onLoadi
       onError(errorMessages[result?.code] || result?.message || 'Não foi possível entrar com Google.')
       return false
     }
-    onSuccess(result.access, result.refresh, result.username, remember)
+    await onSuccess(result.access, result.refresh, result.username, remember)
     return true
   } catch {
     onError('Não foi possível iniciar o login com Google.')

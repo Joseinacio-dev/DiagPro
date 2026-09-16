@@ -7,11 +7,11 @@ module.exports = {
   compression: 'normal',
   npmRebuild: false,
   files: [
-    'main.js', 'preload.js', 'appLifecycle.js', 'rendererTarget.js', 'electronPolicy.js',
+    'main.js', 'preload.js', 'appLifecycle.js', 'rendererTarget.js', 'electronPolicy.js', 'sessionVault.js', 'deviceProviders.js',
     'productionLogger.js', 'supportDiagnostic.js', 'deviceDetector.js', 'package.json', 'googleAuth.js',
     'dist/**/*', 'adb/**/*.js', 'security/**/*.js', 'remediation/**/*.js', 'payments/**/*.js',
     '!node_modules/**',
-    '!**/*.test.*', '!**/fixtures/**', '!**/.env*', '!**/*.log', '!**/.git/**',
+    '!**/*.test.*', '!**/fixtures/**', '!**/.env*', '!**/*.log', '!**/.git/**', '!**/*.map',
   ],
   extraResources: [{
     from: 'resources/platform-tools',

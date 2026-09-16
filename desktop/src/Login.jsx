@@ -19,9 +19,27 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [googleCarregando, setGoogleCarregando] = useState(false)
+  const [recovering, setRecovering] = useState(false)
+  const [email, setEmail] = useState('')
+  const [recoveryMessage, setRecoveryMessage] = useState('')
   const apiStatus = startupStatus?.api?.status || 'checking'
   const backendReady = apiStatus === 'online'
   const adbReady = !['adb_unavailable', 'error'].includes(deviceStatus?.status)
+
+  async function requestRecovery(event) {
+    event.preventDefault()
+    setCarregando(true)
+    setRecoveryMessage('')
+    try {
+      const response = await fetchApi(apiUrl('/api/auth/password/reset/'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }),
+      })
+      setRecoveryMessage(response.ok ? 'Se houver uma conta elegível, você receberá um link por e-mail. Verifique também o spam.'
+        : response.status === 429 ? 'Muitas solicitações. Aguarde antes de tentar novamente.'
+          : 'Recuperação temporariamente indisponível. Contate o suporte.')
+    } catch { setRecoveryMessage('Não foi possível conectar ao servidor. Tente novamente.') }
+    finally { setCarregando(false) }
+  }
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -37,11 +55,13 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
       })
 
       if (!resposta.ok) {
-        throw new Error('Usuário ou senha inválidos')
+        throw new Error(resposta.status === 401 ? 'Usuário ou senha inválidos'
+          : resposta.status === 429 ? 'Muitas tentativas. Aguarde e tente novamente.'
+            : 'Serviço de login temporariamente indisponível.')
       }
 
             const dados = await resposta.json()
-      onLoginSuccess(dados.access, dados.refresh, username, remember)
+      await onLoginSuccess(dados.access, dados.refresh, username, remember)
     } catch (err) {
       setErro(['TypeError', 'TimeoutError'].includes(err?.name)
         ? 'Não foi possível conectar à API do DiagPro.'
@@ -101,6 +121,15 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
       </div>
 
       <div className="dp-login-right">
+        {recovering ? <form className="dp-login-card" onSubmit={requestRecovery}>
+          <h1>Recuperar <span>senha</span></h1>
+          <p>Informe o e-mail cadastrado. Contas criadas apenas com Google devem usar Continuar com Google.</p>
+          <div className="dp-field"><label htmlFor="recovery-email">E-mail</label>
+            <div className="dp-input-wrap"><input id="recovery-email" type="email" autoComplete="email" maxLength={254} required value={email} onChange={event => setEmail(event.target.value)} /></div></div>
+          <p role="status">{recoveryMessage}</p>
+          <button type="submit" className="dp-login-submit" disabled={carregando}>{carregando ? 'Enviando…' : 'Solicitar link'}</button>
+          <button type="button" className="dp-forgot-link" onClick={() => setRecovering(false)}>Voltar ao login</button>
+        </form> :
         <form className="dp-login-card" onSubmit={handleLogin}>
           <h1>Bem-vindo ao <span>DiagPro</span></h1>
           <p>Acesse sua central de diagnóstico</p>
@@ -122,6 +151,7 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
               <User size={16} />
               <input
                 type="text"
+                autoComplete="username"
                 placeholder="Digite seu usuário ou e-mail"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -136,6 +166,7 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
               <Lock size={16} />
               <input
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 placeholder="Digite sua senha"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -155,7 +186,7 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
             <button
               type="button"
               className="dp-forgot-link"
-              onClick={() => alert('Recuperação de senha ainda não implementada.')}
+              onClick={() => { setRecovering(true); setRecoveryMessage('') }}
             >
               Esqueci minha senha
             </button>
@@ -181,7 +212,7 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
           <div className="dp-login-secure">
             <ShieldCheck size={14} /> Ambiente seguro e criptografado
           </div>
-        </form>
+        </form>}
 
         <div className="dp-login-right-footer">
           <Headphones size={14} /> Precisa de ajuda? <a href="#">Fale conosco</a>

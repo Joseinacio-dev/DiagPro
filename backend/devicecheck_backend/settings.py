@@ -193,8 +193,26 @@ if env_bool('DJANGO_TRUST_PROXY_SSL_HEADER'):
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-EMAIL_BACKEND = ('django.core.mail.backends.console.EmailBackend' if DEBUG
-                 else 'django.core.mail.backends.dummy.EmailBackend')
+DIAGPRO_PASSWORD_RESET_ENABLED = env_bool('DIAGPRO_PASSWORD_RESET_ENABLED')
+DIAGPRO_PUBLIC_URL = os.environ.get('DIAGPRO_PUBLIC_URL', '').strip().rstrip('/')
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '').strip()
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '').strip()
+PASSWORD_RESET_TIMEOUT = 1800
+if DIAGPRO_PASSWORD_RESET_ENABLED:
+    from urllib.parse import urlsplit
+    _public_url = urlsplit(DIAGPRO_PUBLIC_URL)
+    if (_public_url.scheme != 'https' or not _public_url.hostname or _public_url.username
+            or _public_url.password or _public_url.path or _public_url.query or _public_url.fragment):
+        raise ImproperlyConfigured('DIAGPRO_PUBLIC_URL deve ser a origem HTTPS pública do backend.')
+    if not EMAIL_HOST or not DEFAULT_FROM_EMAIL or EMAIL_USE_TLS == EMAIL_USE_SSL:
+        raise ImproperlyConfigured('Configure SMTP e exatamente um modo TLS para recuperação de senha.')
 
 
 def env_nonnegative_int(name, default=0):
@@ -222,6 +240,10 @@ def env_rate(name, default):
 
 
 DIAGPRO_THROTTLE_RATES = {
+    'support_ticket': env_rate('DJANGO_THROTTLE_SUPPORT_TICKET_RATE', '30/hour'),
+    'reset_ip': env_rate('DJANGO_THROTTLE_RESET_IP_RATE', '5/hour'),
+    'reset_email': env_rate('DJANGO_THROTTLE_RESET_EMAIL_RATE', '3/hour'),
+    'reset_confirm': env_rate('DJANGO_THROTTLE_RESET_CONFIRM_RATE', '20/hour'),
     'auth_ip': env_rate('DJANGO_THROTTLE_AUTH_IP_RATE', '30/min'),
     'auth_account': env_rate('DJANGO_THROTTLE_AUTH_ACCOUNT_RATE', '10/min'),
     'refresh': env_rate('DJANGO_THROTTLE_REFRESH_RATE', '60/min'),

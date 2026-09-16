@@ -133,7 +133,7 @@ class LoginAccountRateThrottle(ProtectedLoginRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': digest}
 
 
-class RefreshIPRateThrottle(ConfiguredIPRateThrottle):
+class RefreshIPRateThrottle(ProtectedLoginRateThrottle):
     scope = 'refresh'
 
 

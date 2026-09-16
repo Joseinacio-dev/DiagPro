@@ -401,6 +401,27 @@ class SecurityFinding(models.Model):
         return f'{self.rule_id} - diagnóstico #{self.diagnostico_id}'
 
 
+class SupportTicket(models.Model):
+    class Status(models.TextChoices):
+        OPEN = 'OPEN', 'Aberto'
+        IN_PROGRESS = 'IN_PROGRESS', 'Em atendimento'
+        WAITING_CUSTOMER = 'WAITING_CUSTOMER', 'Aguardando cliente'
+        RESOLVED = 'RESOLVED', 'Resolvido'
+        CLOSED = 'CLOSED', 'Fechado'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='support_tickets')
+    subject = models.CharField(max_length=160)
+    description = models.TextField(max_length=5000)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.OPEN)
+    staff_response = models.TextField(max_length=5000, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        indexes = [models.Index(fields=['user', '-created_at'], name='support_owner_date_idx')]
+
+
 class ExternalIdentity(models.Model):
     PROVIDER_GOOGLE = 'google'
     PROVIDER_CHOICES = [(PROVIDER_GOOGLE, 'Google')]

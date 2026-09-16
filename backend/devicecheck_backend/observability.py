@@ -8,6 +8,7 @@ from django.db import DatabaseError
 
 
 EVENTS = frozenset({
+    'password_reset_delivery_failed',
     'backend_started', 'database_failure', 'diagnostic_saved',
     'diagnostic_rejected', 'payment_failure', 'webhook_rejected',
     'webhook_not_processed', 'request_throttled', 'throttle_cache_failure',

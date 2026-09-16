@@ -23,8 +23,11 @@ from .google_auth_views import (
     GoogleOAuthStartView,
 )
 from .diag_ia.views import DiagIaChatView, DiagIaProviderHealthView
+from .password_reset import PasswordResetRequestView, PasswordResetConfirmView, reset_page
+from .support_views import SupportTicketViewSet
 
 router = DefaultRouter()
+router.register(r'support/tickets', SupportTicketViewSet, basename='support-ticket')
 router.register(r'empresas', EmpresaViewSet, basename='empresa')
 router.register(r'clientes', ClienteViewSet, basename='cliente')
 router.register(r'dispositivos', DispositivoViewSet, basename='dispositivo')
@@ -35,6 +38,9 @@ router.register(r'diagnosticos', DiagnosticoViewSet, basename='diagnostico')
 router.register(r'security/findings', SecurityFindingViewSet, basename='security-finding')
 
 urlpatterns = [
+    path('auth/password/reset/', PasswordResetRequestView.as_view(), name='password-reset'),
+    path('auth/password/reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+    path('auth/password/reset/page/', reset_page, name='password-reset-page'),
     path('diag-ia/chat/', DiagIaChatView.as_view(), name='diag-ia-chat'),
     path('diag-ia/provider-health/', DiagIaProviderHealthView.as_view(), name='diag-ia-provider-health'),
     path('auth/google/start/', GoogleOAuthStartView.as_view(), name='google-oauth-start'),

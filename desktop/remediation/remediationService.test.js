@@ -83,6 +83,13 @@ test('pacote crítico é bloqueado mesmo se a origem o classificar incorretament
   )
 })
 
+for (const packageName of ['com.sec.android.app.launcher', 'com.motorola.launcher3', 'com.miui.securitycenter']) {
+  test(`pacote crítico de fabricante ${packageName} é bloqueado`, async () => {
+    const { service } = fixture({ apps: [{ packageName, type: 'user' }] })
+    await assert.rejects(service.createRemovalPreview({ serial: 'SERIAL-1', packageName }), error => error.code === 'CRITICAL_APP_BLOCKED')
+  })
+}
+
 test('package inválido é rejeitado antes do ADB', async () => {
   const { service } = fixture()
   await assert.rejects(

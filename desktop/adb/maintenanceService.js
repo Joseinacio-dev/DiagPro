@@ -1,6 +1,7 @@
 const { createAdbClient, isValidSerial } = require('./adbClient')
 const { createAdbError } = require('./adbErrors')
 const { parseAdbDevices, parseMemory, parseStorage } = require('../security/parsers/adbParsers')
+const { createAndroidBatteryProvider } = require('../deviceProviders')
 
 const UNAVAILABLE = 'Não disponível neste dispositivo'
 const TERMINAL = new Set(['ADB_NOT_FOUND', 'DEVICE_NOT_FOUND', 'DEVICE_DISCONNECTED', 'DEVICE_OFFLINE', 'DEVICE_UNAUTHORIZED', 'SCAN_ABORTED', 'OPERATION_CANCELED'])
@@ -134,7 +135,19 @@ function createMaintenanceService({ adb = createAdbClient(), now = () => new Dat
       if (memory.status !== 'available') notes.push('A leitura de memória está incompleta; não é possível concluir se há pressão de RAM.')
     }
     if (action === 'battery') {
-      await collect('Bateria atual', ['dumpsys', 'battery'], batteryFields)
+      const provider = createAndroidBatteryProvider({ collect: (label, args) => collect(label, args, batteryFields) })
+      await provider.inspect()
+      for (const [label, path] of [
+        ['Corrente média', '/sys/class/power_supply/battery/current_avg'],
+        ['Ciclos reportados', '/sys/class/power_supply/battery/cycle_count'],
+        ['Capacidade total reportada', '/sys/class/power_supply/battery/charge_full'],
+        ['Capacidade de projeto reportada', '/sys/class/power_supply/battery/charge_full_design'],
+      ]) {
+        await collect(label, ['cat', path], text => {
+          const value = String(text).trim()
+          return [[label, /^[-+]?\d{1,15}$/.test(value) ? value : null]]
+        })
+      }
       notes.push('Consulta restrita ao estado atual da bateria; o histórico de uso por aplicativo não é coletado.')
       notes.push('Cobertura parcial: as leituras dependem do fabricante, das permissões e da janela de coleta do Android.',
         'Se o Android informar UPDATES STOPPED (valores simulados), a leitura física fica indisponível. O DiagPro não altera esse estado.',

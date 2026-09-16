@@ -26,3 +26,8 @@
 .support-help-list .open button svg { transform: rotate(180deg); }
 .support-help-list p { margin: 0; border-top: 1px solid #26374b; padding: 10px 11px; color: #8da2bb; font-size: 9px; line-height: 1.55; }
 @media (max-width: 800px) { .support-grid, .support-help-list { grid-template-columns: 1fr; } }
+.support-section form { display: grid; gap: 8px; margin-top: 14px; }
+.support-section form input, .support-section form textarea { width: 100%; box-sizing: border-box; border: 1px solid #34465b; border-radius: 8px; background: #0b1626; color: #e3efff; padding: 10px; font: inherit; }
+.support-section form button { justify-self: start; }
+.support-section form + p[role="status"] { min-height: 20px; }
+.support-section > article { border-top: 1px solid #2e4156; padding: 12px 0; }

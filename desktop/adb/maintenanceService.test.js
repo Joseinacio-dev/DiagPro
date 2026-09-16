@@ -88,7 +88,8 @@ test('battery collects only current readings without usage history or reset', as
   assert.equal(result.sections[0].fields.find(field => field.name === 'Tecnologia').value, 'Li-poly')
   assert.equal(result.sections[0].fields.find(field => field.name === 'Corrente atual').value, '-420000 µA')
   assert.equal(result.sections[0].fields.find(field => field.name === 'Contador de carga').value, '2300000 µAh')
-  assert.equal(result.sections.length, 1)
+  assert.equal(result.sections.length, 5)
+  assert.equal(result.sections[1].status, 'unavailable')
 })
 
 test('battery never invents unavailable electrical readings', () => {

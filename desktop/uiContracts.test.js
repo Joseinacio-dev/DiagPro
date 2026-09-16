@@ -15,9 +15,9 @@ test('Suporte aparece após Plano e assinatura na seção SISTEMA', () => {
   assert.ok(settings >= 0 && settings < subscription && subscription < support)
 })
 
-test('página Suporte contém blocos profissionais e não inventa canal humano', () => {
+test('página Suporte diferencia chamados reais de chat ainda indisponível', () => {
   const page = source('src/pages/SupportPage.jsx')
-  for (const content of ['Central de ajuda e diagnóstico do DiagPro', 'Diag IA', 'Diagnóstico técnico', 'Ajuda rápida', 'Suporte humano', 'Em breve']) {
+  for (const content of ['Central de ajuda e diagnóstico do DiagPro', 'Diag IA', 'Diagnóstico técnico', 'Ajuda rápida', 'Suporte humano', 'Abrir chamado', 'Chat ao vivo', 'Indisponível', '<SupportTickets />']) {
     assert.ok(page.includes(content), content)
   }
 })

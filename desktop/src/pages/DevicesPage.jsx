@@ -38,6 +38,11 @@ const CRITICAL_APP_PACKAGES = new Set([
   'com.google.android.permissioncontroller',
   'com.google.android.gms',
   'com.google.android.gsf',
+  'com.sec.android.app.launcher',
+  'com.samsung.android.knox.containercore',
+  'com.samsung.android.providers.media',
+  'com.motorola.launcher3',
+  'com.motorola.ccc.ota',
   'com.miui.core',
   'com.miui.guardprovider',
   'com.miui.home',
@@ -881,6 +886,7 @@ function DevicesPage({ accessToken, dispositivo = { status: 'waiting' }, scanRes
               <div><span>Permissões solicitadas</span><strong>{detailApp.requestedPermissions === null ? 'Não disponível' : detailApp.requestedPermissions.length}</strong></div>
               <div><span>Remoção</span><strong>{detailApp.canRemove ? 'Disponível com confirmação' : 'Não permitida'}</strong></div>
             </div>
+            {detailApp.requestedPermissions?.length > 0 && <div className="dp-devices-app-permissions"><h3>Permissões declaradas pelo pacote</h3><ul>{detailApp.requestedPermissions.map(permission => <li key={permission}>{permission}</li>)}</ul></div>}
             <div className="dp-devices-modal-actions">
               <button className="dp-devices-secondary-btn" onClick={() => setDetailApp(null)}>Fechar</button>
             </div>

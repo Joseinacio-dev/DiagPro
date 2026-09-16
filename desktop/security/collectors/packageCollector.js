@@ -217,11 +217,16 @@ function createPackageCollector({
     }
     if (includeExtendedStates) {
       for (const [key, args] of [
-        ['disabled', ['shell', 'pm', 'list', 'packages', '-d']],
-        ['suspended', ['shell', 'pm', 'list', 'packages', '--suspended']],
+        ['disabled', ['shell', 'pm', 'list', 'packages', '-d', ...userArgs]],
+        ['suspended', ['shell', 'pm', 'list', 'packages', '--suspended', ...userArgs]],
       ]) {
         try {
           const output = await adb.runDevice(serial, args, { signal, timeout: extendedTimeout })
+          const lines = String(output).split(/\r?\n/).filter(line => line.trim())
+          if (lines.some(line => !line.trim().startsWith('package:')) || parsePackageList(output).length !== lines.length) {
+            stateCollection[key] = { status: 'not_available', reason: 'INVALID_RESPONSE', packages: [] }
+            continue
+          }
           stateCollection[key] = { status: 'available', reason: null, packages: parsePackageList(output).map((app) => app.packageName) }
         } catch (error) {
           throwIfTerminal(error)

@@ -43,6 +43,28 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertFalse(config['CORS_ALLOW_CREDENTIALS'])
         self.assertTrue(config['SESSION_COOKIE_SECURE'])
         self.assertTrue(config['CSRF_COOKIE_SECURE'])
+        self.assertEqual(config['SECURE_HSTS_SECONDS'], 0)
+        self.assertFalse(config['SECURE_HSTS_INCLUDE_SUBDOMAINS'])
+        self.assertFalse(config['SECURE_HSTS_PRELOAD'])
+
+    def test_production_filters_loopback_cors_but_keeps_explicit_https_origin(self):
+        config = self.configuration(DJANGO_CORS_ALLOWED_ORIGINS=(
+            'http://localhost:5173,http://127.0.0.1:5173,null,file://,https://app.example.test'
+        ))
+        self.assertEqual(config['CORS_ALLOWED_ORIGINS'], ['https://app.example.test'])
+
+    def test_hsts_defaults_on_only_after_production_https_redirect(self):
+        config = self.configuration(DJANGO_SECURE_SSL_REDIRECT='true')
+        self.assertEqual(config['SECURE_HSTS_SECONDS'], 31536000)
+        self.assertFalse(config['SECURE_HSTS_INCLUDE_SUBDOMAINS'])
+        self.assertFalse(config['SECURE_HSTS_PRELOAD'])
+
+    def test_hsts_preload_requires_long_duration_and_subdomains(self):
+        with self.assertRaisesRegex(ImproperlyConfigured, 'HSTS preload'):
+            self.configuration(
+                DJANGO_SECURE_SSL_REDIRECT='true',
+                DJANGO_SECURE_HSTS_PRELOAD='true',
+            )
 
     def test_secret_required(self):
         with self.assertRaisesRegex(ImproperlyConfigured, 'DJANGO_SECRET_KEY'):
@@ -274,6 +296,33 @@ class ProductionHttpTests(SimpleTestCase):
 
 
 class SafeLoggingTests(SimpleTestCase):
+    def test_gunicorn_access_log_uses_path_without_query_or_headers(self):
+        config_file = Path(__file__).resolve().parents[1] / 'gunicorn.conf.py'
+        access_format = runpy.run_path(str(config_file))['access_log_format']
+        atoms = {
+            'h': '127.0.0.1', 't': 'test-time', 'm': 'GET',
+            'U': '/api/auth/google/callback/', 'H': 'HTTP/1.1',
+            's': '400', 'b': '123', 'L': '0.015',
+            'q': '?code=fake-oauth-code&state=fake-oauth-state',
+            'r': 'GET /api/auth/google/callback/?code=fake-oauth-code&state=fake-oauth-state HTTP/1.1',
+            '{authorization}i': 'Bearer fake-jwt-token',
+            '{cookie}i': 'refresh=fake-refresh-token',
+        }
+
+        rendered = access_format % atoms
+
+        self.assertIn('GET /api/auth/google/callback/ HTTP/1.1', rendered)
+        self.assertIn('400 123 0.015', rendered)
+        for secret in (
+            'fake-oauth-code', 'fake-oauth-state', 'fake-jwt-token',
+            'fake-refresh-token', '?', 'authorization', 'cookie',
+        ):
+            with self.subTest(secret=secret):
+                self.assertNotIn(secret, rendered.casefold())
+        self.assertIn('%(U)s', access_format)
+        self.assertNotIn('%(q)s', access_format)
+        self.assertNotIn('%(r)s', access_format)
+
     def test_formatter_discards_body_secrets_and_exception_text(self):
         record = logging.LogRecord('django.request', logging.ERROR, '/private/path', 1,
                                    'password=%s', ('sensitive-marker',),

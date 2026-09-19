@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from pathlib import Path
 import os
 import re
+from urllib.parse import urlsplit
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 import dj_database_url
@@ -181,9 +182,19 @@ MEDIA_URL = '/media/'
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT')
-SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', '0'))
+# HSTS is enabled by default only when production already forces HTTPS. The
+# Render hostname has no DiagPro-managed subdomains, so includeSubDomains and
+# preload remain explicit opt-ins.
+_default_hsts_seconds = 31536000 if not DEBUG and SECURE_SSL_REDIRECT else 0
+SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_SECURE_HSTS_SECONDS', str(_default_hsts_seconds)))
+if SECURE_HSTS_SECONDS < 0:
+    raise ImproperlyConfigured('DJANGO_SECURE_HSTS_SECONDS deve ser não negativo.')
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS')
 SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD')
+if SECURE_HSTS_PRELOAD and (SECURE_HSTS_SECONDS < 31536000 or not SECURE_HSTS_INCLUDE_SUBDOMAINS):
+    raise ImproperlyConfigured(
+        'HSTS preload exige pelo menos 31536000 segundos e includeSubDomains habilitado.'
+    )
 CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
 # Somente atrás de um proxy confiável que sobrescreve o header recebido do cliente.
 if env_bool('DJANGO_TRUST_PROXY_SSL_HEADER'):
@@ -206,7 +217,6 @@ EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '').strip()
 PASSWORD_RESET_TIMEOUT = 1800
 if DIAGPRO_PASSWORD_RESET_ENABLED:
-    from urllib.parse import urlsplit
     _public_url = urlsplit(DIAGPRO_PUBLIC_URL)
     if (_public_url.scheme != 'https' or not _public_url.hostname or _public_url.username
             or _public_url.password or _public_url.path or _public_url.query or _public_url.fragment):
@@ -338,7 +348,25 @@ SIMPLE_JWT = {
     'CHECK_REVOKE_TOKEN': True,
 }
 _development_cors_origins = 'http://localhost:5173,http://127.0.0.1:5173,null,file://' if DEBUG else ''
-CORS_ALLOWED_ORIGINS = env_list('DJANGO_CORS_ALLOWED_ORIGINS', _development_cors_origins)
+_configured_cors_origins = env_list('DJANGO_CORS_ALLOWED_ORIGINS', _development_cors_origins)
+
+
+def _is_local_development_origin(origin):
+    if origin in {'null', 'file://'}:
+        return True
+    try:
+        return urlsplit(origin).hostname in {'localhost', '127.0.0.1', '::1'}
+    except ValueError:
+        return False
+
+
+# Loopback origins are useful for Vite development but must not remain trusted
+# by the public API merely because an old production environment variable still
+# lists them. Explicit non-loopback origins continue to be supported.
+CORS_ALLOWED_ORIGINS = [
+    origin for origin in _configured_cors_origins
+    if DEBUG or not _is_local_development_origin(origin)
+]
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = False
 CORS_URLS_REGEX = r'^/(?:api/.*|health/?)$'

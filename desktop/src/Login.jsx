@@ -5,6 +5,9 @@ import { fetchApi } from './utils/auth.js'
 import { cancelGoogleLogin, executeGoogleLogin } from './utils/googleLogin.mjs'
 import './Login.css'
 
+// Para reativar a recuperação de senha na UI, altere para true.
+const PASSWORD_RECOVERY_ENABLED = false
+
 const features = [
   { icon: LineChart, title: 'Análises precisas', desc: 'Informações detalhadas e confiáveis.' },
   { icon: ShieldCheck, title: 'Segurança avançada', desc: 'Seus dados protegidos com tecnologia de ponta.' },
@@ -121,7 +124,7 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
       </div>
 
       <div className="dp-login-right">
-        {recovering ? <form className="dp-login-card" onSubmit={requestRecovery}>
+        {PASSWORD_RECOVERY_ENABLED && recovering ? <form className="dp-login-card" onSubmit={requestRecovery}>
           <h1>Recuperar <span>senha</span></h1>
           <p>Informe o e-mail cadastrado. Contas criadas apenas com Google devem usar Continuar com Google.</p>
           <div className="dp-field"><label htmlFor="recovery-email">E-mail</label>
@@ -183,13 +186,13 @@ function Login({ onLoginSuccess, startupStatus, deviceStatus }) {
               <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
               Lembrar-me
             </label>
-            <button
+            {PASSWORD_RECOVERY_ENABLED && <button
               type="button"
               className="dp-forgot-link"
               onClick={() => { setRecovering(true); setRecoveryMessage('') }}
             >
               Esqueci minha senha
-            </button>
+            </button>}
           </div>
 
           <button type="submit" className="dp-login-submit" disabled={carregando || !backendReady}>

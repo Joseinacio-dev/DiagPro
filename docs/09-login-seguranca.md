@@ -27,7 +27,9 @@ Rotas atuais:
 
 O token padrão do Django é temporário, de uso único após a troca e expira em 30 minutos. Ao definir uma nova senha, refresh tokens anteriores tornam-se inválidos pelo mecanismo de revogação associado à senha.
 
-O link mantém o token no fragmento `#` da URL, evitando envio no primeiro request HTTP. O envio por e-mail permanece desativado até configurar e testar SMTP em produção.
+O link mantém o token no fragmento `#` da URL, evitando envio no primeiro request HTTP. O e-mail possui versões texto e HTML, usa o assunto `Redefinição de senha — DiagPro`, informa a validade e orienta ignorar a mensagem quando a solicitação não foi feita pelo destinatário.
+
+O fluxo está funcional no código e permanece desativado até configurar e testar SMTP em produção. `DIAGPRO_PUBLIC_URL` deve conter somente a origem HTTPS pública do backend. O transporte exige exatamente um modo seguro: TLS ou SSL. Falhas do provedor são registradas de forma sanitizada e não alteram a resposta neutra enviada ao solicitante.
 
 ## Gerador de senha
 

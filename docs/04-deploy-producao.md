@@ -32,6 +32,17 @@ Configure valores apenas no provedor. Os nomes relevantes incluem:
 
 Nunca documente nem imprima os valores reais.
 
+### SMTP e recuperação de senha
+
+Para ativar a recuperação em produção, configure no provedor:
+
+- `DIAGPRO_PASSWORD_RESET_ENABLED=true`;
+- `DIAGPRO_PUBLIC_URL` com a origem HTTPS pública do backend, sem caminho, query ou credenciais;
+- `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` e `DEFAULT_FROM_EMAIL`;
+- exatamente um entre `EMAIL_USE_TLS=true` e `EMAIL_USE_SSL=true`.
+
+Use as informações oficiais do provedor SMTP escolhido. Não copie credenciais para arquivos versionados. Depois de salvar as variáveis, faça um novo deploy e valide o fluxo com uma conta de teste e uma caixa postal controlada. Configurações inválidas de URL ou de TLS/SSL impedem a inicialização de produção de forma segura.
+
 ## Validação
 
 1. confirmar o SHA implantado;
@@ -48,6 +59,6 @@ Rollback deve selecionar um deploy anterior conhecido e compatível com o schema
 ## Limitações operacionais
 
 - instâncias gratuitas podem sofrer cold start;
-- password reset permanece desativado enquanto SMTP não estiver configurado;
+- password reset está funcional no código, mas permanece desativado enquanto SMTP de produção não estiver configurado e validado;
 - pagamentos ficam indisponíveis de forma segura enquanto as variáveis do Mercado Pago não estiverem configuradas;
 - mudanças de ambiente devem ser feitas conscientemente no painel e gerar nova validação.

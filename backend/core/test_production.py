@@ -91,6 +91,29 @@ class ProductionSettingsTests(SimpleTestCase):
         with self.assertRaises(ImproperlyConfigured):
             self.configuration(DJANGO_DEBUG='typo')
 
+    def test_password_reset_requires_https_origin_and_exactly_one_tls_mode(self):
+        base = {
+            'DIAGPRO_PASSWORD_RESET_ENABLED': 'true',
+            'DIAGPRO_PUBLIC_URL': 'https://api.example.test',
+            'EMAIL_HOST': 'smtp.example.test',
+            'DEFAULT_FROM_EMAIL': 'support@example.test',
+        }
+        config = self.configuration(**base, EMAIL_USE_TLS='true', EMAIL_USE_SSL='false')
+        self.assertEqual(config['DIAGPRO_PUBLIC_URL'], 'https://api.example.test')
+        self.assertTrue(config['EMAIL_USE_TLS'])
+        self.assertFalse(config['EMAIL_USE_SSL'])
+
+        invalid = (
+            {'EMAIL_USE_TLS': 'true', 'EMAIL_USE_SSL': 'true'},
+            {'EMAIL_USE_TLS': 'false', 'EMAIL_USE_SSL': 'false'},
+            {'DIAGPRO_PUBLIC_URL': 'http://api.example.test'},
+            {'DIAGPRO_PUBLIC_URL': 'https://api.example.test/reset'},
+            {'DIAGPRO_PUBLIC_URL': 'https://user:password@api.example.test'},
+        )
+        for changes in invalid:
+            with self.subTest(changes=changes), self.assertRaises(ImproperlyConfigured):
+                self.configuration(**{**base, **changes})
+
     def test_production_rejects_empty_and_wildcard_hosts(self):
         for hosts in ('', '*', 'localhost,*'):
             with self.subTest(hosts=hosts), self.assertRaises(ImproperlyConfigured):

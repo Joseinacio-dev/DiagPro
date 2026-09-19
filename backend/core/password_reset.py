@@ -11,6 +11,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import DatabaseError, close_old_connections, transaction
 from django.shortcuts import render
+from django.template.loader import render_to_string
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.cache import never_cache
@@ -58,10 +59,18 @@ def deliver_reset(email):
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
             link = f'{settings.DIAGPRO_PUBLIC_URL}/api/auth/password/reset/page/#{uid}/{token}'
-            send_mail('Redefina sua senha do DiagPro',
-                      f'Use o link em até 30 minutos:\n{link}\n'
-                      'Se não solicitou esta alteração, ignore este e-mail.',
-                      settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+            context = {
+                'reset_url': link,
+                'validity_minutes': max(1, settings.PASSWORD_RESET_TIMEOUT // 60),
+            }
+            send_mail(
+                'Redefinição de senha — DiagPro',
+                render_to_string('core/email/password_reset.txt', context),
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+                html_message=render_to_string('core/email/password_reset.html', context),
+            )
     except (SMTPException, OSError, DatabaseError) as exc:
         logger.warning('password_reset_delivery_failed', extra={'error_type': type(exc).__name__})
     finally:

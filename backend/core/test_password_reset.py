@@ -36,7 +36,17 @@ class PasswordResetTests(APITestCase):
     def test_mail_link_fragment_and_no_unknown_or_google_only_mail(self):
         deliver_reset(self.user.email)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('/page/#', mail.outbox[0].body)
+        message = mail.outbox[0]
+        self.assertEqual(message.subject, 'Redefinição de senha — DiagPro')
+        self.assertIn('/page/#', message.body)
+        self.assertIn('30 minutos', message.body)
+        self.assertIn('Se você não solicitou esta alteração, ignore este e-mail.', message.body)
+        self.assertEqual(len(message.alternatives), 1)
+        html = message.alternatives[0].content
+        self.assertEqual(message.alternatives[0].mimetype, 'text/html')
+        self.assertIn('Redefinir senha', html)
+        self.assertIn('/page/#', html)
+        self.assertNotIn(self.user.password, message.body + html)
         self.user.set_unusable_password(); self.user.save()
         deliver_reset(self.user.email)
         deliver_reset('unknown@example.test')

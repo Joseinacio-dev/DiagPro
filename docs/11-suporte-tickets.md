@@ -42,4 +42,12 @@ Ticket real no backend está implementado. E-mail de notificação de suporte n�
 
 ## Administração
 
-A API permite atendimento por staff, mas `SupportTicket` ainda não está registrado no Django Admin. O atendimento atual deve usar a interface/API autorizada até esse registro ser implementado e testado.
+`SupportTicket` está registrado no Django Admin. Staff com permissões Django adequadas e superusers podem:
+
+- listar chamados com usuário, assunto, status e datas;
+- filtrar por status e datas;
+- buscar por ID, usuário, e-mail e assunto;
+- consultar o relato completo;
+- atualizar somente status e resposta da equipe.
+
+A criação pelo Admin e a exclusão foram desabilitadas para preservar o fluxo autenticado da API e o histórico. Identificação, proprietário, relato e datas são somente leitura.

@@ -7,7 +7,7 @@ Esta é a fonte rápida e oficial do estado do DiagPro. “Teste físico” indi
 | Login usuário/senha | FUNCIONAL | Sim | Sim | Backend online validado; sessão expira e renova. |
 | Login Google | FUNCIONAL | Sim | Sim | OAuth pelo backend. |
 | Lembrar-me/safeStorage | FUNCIONAL | Sim | Parcial | Refresh protegido no Windows quando disponível. |
-| Recuperação de senha | PARCIAL | Sim | Não | Implementada; SMTP de produção desativado. |
+| Recuperação de senha | PARCIAL | Sim | Não | Funcional no código; aguardando SMTP de produção. |
 | Licenças e limites | FUNCIONAL | Sim | Sim | Backend é fonte de verdade. |
 | Checkout Pro/webhook | PARCIAL | Sim | Parcial | Código funcional; produção depende das variáveis Mercado Pago. |
 | Recorrência automática | PENDENTE | Não | Não | `preapproval`/assinatura não implementado. |
@@ -29,7 +29,7 @@ Esta é a fonte rápida e oficial do estado do DiagPro. “Teste físico” indi
 | Backup para pendrive | PENDENTE | Não | Não | Destino/cópia não implementados. |
 | Diag IA/Gemini | FUNCIONAL | Sim | Sim | Tem fallback externo e local. |
 | Tickets de suporte | FUNCIONAL | Sim | Parcial | API publicada e migration aplicada. |
-| Ticket no Django Admin | PENDENTE | Não | Não | Modelo ainda não registrado no Admin. |
+| Ticket no Django Admin | FUNCIONAL | Sim | Não | Consulta, filtros e atendimento; criação e exclusão protegidas. |
 | Instalador Windows x64 | PARCIAL | Sim | Parcial | Beta gerado; repetir instalação Windows 10/11. |
 | Authenticode/SmartScreen | PENDENTE | Não | Não | Bloqueador para venda pública. |
 | Atualização automática | PENDENTE | Não | Não | Não implementada. |
@@ -37,7 +37,7 @@ Esta é a fonte rápida e oficial do estado do DiagPro. “Teste físico” indi
 
 ## Última validação registrada
 
-- backend: 270 testes aprovados durante a criação desta documentação;
+- backend: 276 testes aprovados após finalizar o Admin de suporte e o e-mail de recuperação;
 - desktop: 330 testes aprovados durante a criação desta documentação;
 - build Vite aprovado nesta etapa; smoke Electron aprovado na validação anterior;
 - produção: health HTTP 200, migration `core.0011_supportticket` e collectstatic confirmados;

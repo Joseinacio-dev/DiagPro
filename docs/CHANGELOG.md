@@ -7,6 +7,8 @@ Este arquivo registra marcos relevantes. O histórico detalhado permanece no Git
 - documentação oficial e viva do produto;
 - status consolidado por funcionalidade;
 - guias de setup, deploy, testes e troubleshooting.
+- atendimento de tickets no Django Admin com campos protegidos e sem exclusão;
+- e-mail de recuperação de senha em texto e HTML, pronto para configuração SMTP de produção.
 
 ## Beta 0.1.0
 

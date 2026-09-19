@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Empresa, Cliente, Dispositivo, Analise, Relatorio, Plano, Licenca,
-    Pagamento, SecurityFinding,
+    Pagamento, SecurityFinding, SupportTicket,
 )
 
 admin.site.register(Empresa)
@@ -78,6 +78,26 @@ class SecurityFindingAdmin(admin.ModelAdmin):
         'subject_id', 'title', 'summary', 'severity', 'evidence_confidence',
         'recommendation', 'remediation_type', 'remediation_available', 'evidence',
         'score_contribution', 'scorer_version', 'created_at', 'updated_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SupportTicket)
+class SupportTicketAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'subject', 'status', 'created_at', 'updated_at')
+    list_filter = ('status', 'created_at', 'updated_at')
+    search_fields = ('=id', 'user__username', 'user__email', 'subject')
+    ordering = ('-created_at', '-id')
+    list_select_related = ('user',)
+    readonly_fields = ('id', 'user', 'subject', 'description', 'created_at', 'updated_at')
+    fields = (
+        'id', 'user', 'subject', 'description', 'status', 'staff_response',
+        'created_at', 'updated_at',
     )
 
     def has_add_permission(self, request):
